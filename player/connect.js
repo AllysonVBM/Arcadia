@@ -1,8 +1,5 @@
 const mineflayer = require('mineflayer')
 const pathfinder = require('mineflayer-pathfinder').pathfinder
-const Movements = require('mineflayer-pathfinder').Movements
-const { GoalFollow } = require('mineflayer-pathfinder').goals
-const mcDataLoader = require('minecraft-data')
 
 const serverConfig = require('./server_cfg.js')
 const blackboard = require('./state/blackboard.js')
@@ -10,6 +7,11 @@ const agentHealth = require('./perception/agentHealth.js')
 const agentPosition = require('./perception/agentPosition.js')
 const inventoryState = require('./perception/inventoryState.js')
 const reflexTick = require('./core/reflex-loop.js')
+const follow = require('./skills/follow.js')
+const workingMemory = require('./memory/workingMemory.js')
+const { startCognitiveController } = require('./core/cognitive-controller.js')
+const { startDashboard } = require('./dashboard/server.js')
+const { startViewer } = require('./dashboard/viewer.js')
 
 const bot = mineflayer.createBot({
   host: serverConfig.host,
@@ -49,25 +51,6 @@ function lookAtNearestPlayer() {
   bot.lookAt(pos)
 }
 
-function followPlayer(username) {
-  const target = bot.players[username]
-
-  if (!target || !target.entity) {
-    bot.chat('Você está muito longe, não consigo te ver!')
-    return
-  }
-
-  const mcData = mcDataLoader(bot.version)
-  const movements = new Movements(bot, mcData)
-  movements.scafoldingBlocks = []
-
-  bot.pathfinder.setMovements(movements)
-  // GoalFollow (não GoalNear) porque acompanha a entidade continuamente —
-  // GoalNear mirava só na posição capturada no instante do comando, então
-  // virava um ponto parado assim que o jogador se movia de novo.
-  bot.pathfinder.setGoal(new GoalFollow(target.entity, 1), true)
-}
-
 
 // Percepção: grava no blackboard sempre que o mineflayer avisa mudança de vida/fome
 // Reflexo: reage imediatamente com heurísticas locais, sem esperar a LLM
@@ -79,8 +62,12 @@ bot.on('health', () => {
 bot.on('chat', (username, message) => {
   if (username === bot.username) return
 
+  // Toda mensagem vira contexto pro Cognitive Controller, mesmo os comandos
+  workingMemory.remember(username, message)
+  if (dashboard) dashboard.pushChat(username, message)
+
   if (message === '!follow') {
-    followPlayer(username)
+    follow(bot, username)
   }
 
   if (message === '!position') {
@@ -108,4 +95,21 @@ bot.on('chat', (username, message) => {
 bot.on('physicTick', () => {
   lookAtNearestPlayer()
   agentPosition(bot)
+})
+
+// Cognitive Controller: só começa a decidir sozinho depois que o bot de fato
+// nasceu no mundo (antes disso não há estado nenhum pra ler).
+// Dashboard + viewer 3D: mesma lógica, só fazem sentido depois do spawn.
+let stopCognitiveController = null
+let dashboard = null
+
+bot.once('spawn', () => {
+  stopCognitiveController = startCognitiveController(bot)
+  dashboard = startDashboard(bot, { port: 4000, viewerPort: 3007 })
+  startViewer(bot, { port: 3007 })
+})
+
+bot.on('end', () => {
+  if (stopCognitiveController) stopCognitiveController()
+  if (dashboard) dashboard.stop()
 })

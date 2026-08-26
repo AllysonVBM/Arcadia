@@ -1,27 +1,41 @@
 {
   "name": "arcadia",
   "version": "1.0.0",
-  "description": "Agentes de IA no Minecraft - Seguindo a arquiteturo usada pela ALTERA",
-  "main": "index.js",
+  "description": "Agente de IA autônomo no Minecraft via mineflayer, com arquitetura cognitiva inspirada no PIANO (Project Sid, Altera.AL) e um LLM local via Ollama como Cognitive Controller. Projeto de pesquisa.",
+  "main": "player/connect.js",
   "scripts": {
+    "start": "node player/connect.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AllysonVBM/Arcadia.git"
   },
-  "keywords": [],
+  "keywords": [
+    "minecraft",
+    "mineflayer",
+    "llm",
+    "ollama",
+    "agents",
+    "piano",
+    "research"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "bugs": {
     "url": "https://github.com/AllysonVBM/Arcadia/issues"
   },
   "homepage": "https://github.com/AllysonVBM/Arcadia#readme",
   "dependencies": {
+    "canvas": "^3.2.3",
     "minecraft-protocol": "^1.66.2",
     "mineflayer": "^4.37.1",
     "mineflayer-pathfinder": "^2.4.5",
+    "prismarine-viewer": "^1.33.0",
     "ws": "^8.21.3"
   }
 }
