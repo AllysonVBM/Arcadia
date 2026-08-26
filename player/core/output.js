@@ -23,8 +23,16 @@ const placeBlock = require('../skills/placeBlock.js')
 const cookItem = require('../skills/cookItem.js')
 const explore = require('../skills/explore.js')
 const teach = require('../skills/teach.js')
+const hunt = require('../skills/hunt.js')
+const fight = require('../skills/fight.js')
+const bow = require('../skills/bow.js')
+const plant = require('../skills/plant.js')
+const swim = require('../skills/swim.js')
 
-const MOVEMENT_ACTIONS = new Set(['flee', 'eat', 'follow', 'mine', 'craft', 'place', 'cook', 'explore'])
+const MOVEMENT_ACTIONS = new Set([
+  'flee', 'eat', 'follow', 'mine', 'craft', 'place', 'cook', 'explore',
+  'hunt', 'fight', 'bow', 'plant', 'swim',
+])
 
 // Executa uma skill "gated": se o agente já sabe, roda normal. Se não sabe,
 // tenta mesmo assim — sorteia pela chance de prática (memory/skills.js) e
@@ -84,6 +92,21 @@ function dispatchIntent(bot) {
       break
     case 'explore':
       explore(bot)
+      break
+    case 'hunt':
+      runGated(bot, 'hunt', () => hunt(bot))
+      break
+    case 'fight':
+      runGated(bot, 'fight', () => fight(bot))
+      break
+    case 'bow':
+      runGated(bot, 'bow', () => bow(bot))
+      break
+    case 'plant':
+      runGated(bot, 'plant', () => plant(bot))
+      break
+    case 'swim':
+      runGated(bot, 'swim', () => swim(bot))
       break
     case 'teach':
       if (intent.target && intent.skill && intent.price != null) {

@@ -95,10 +95,15 @@ player/
 │   ├── follow.js                 # segue um jogador continuamente
 │   ├── goTo.js                   # vai até uma coordenada (usada pela área de spawn do cenário)
 │   ├── mine.js                   # acha e quebra um bloco de um tipo específico
-│   ├── craftItem.js              # crafta um item, usando mesa de trabalho se precisar
+│   ├── craftItem.js              # crafta um item; faz e coloca mesa sozinho se souber "place"
 │   ├── placeBlock.js             # constrói: coloca um bloco do inventário
 │   ├── cookItem.js               # cozinha num forno (exige combustível + item cru)
 │   ├── explore.js                # anda numa direção aleatória, pra descobrir área nova
+│   ├── hunt.js                   # caça o animal mais próximo, pra conseguir carne crua
+│   ├── fight.js                  # enfrenta a ameaça hostil mais próxima, recua se a vida cair
+│   ├── bow.js                    # atira com arco e flecha na ameaça mais próxima
+│   ├── plant.js                  # planta uma semente numa terra arável já existente
+│   ├── swim.js                   # vai deliberadamente até a água mais próxima e atravessa
 │   └── teach.js                  # oferece ensinar uma skill conhecida a outro agente
 ├── memory/
 │   ├── workingMemory.js          # STM: buffer circular de eventos recentes (RAM)
@@ -208,10 +213,15 @@ Além de `flee`/`eat`/`follow`/`idle`/`speak`, o Controller pode decidir:
 | Ação | O que faz | `target` |
 |---|---|---|
 | `mine` | Acha o bloco mais próximo do tipo pedido (dentro do que já foi explorado) e quebra | nome do bloco, ex. `oak_log`, `stone`, `iron_ore` |
-| `craft` | Crafta um item — usa mesa de trabalho se a receita exigir e houver uma por perto | nome do item, ex. `wooden_pickaxe` |
+| `craft` | Crafta um item — usa mesa de trabalho se a receita exigir; faz e coloca uma sozinho se souber `place` e tiver material | nome do item, ex. `wooden_pickaxe` |
 | `place` | Constrói: coloca um bloco do inventário em cima de onde o agente está pisando | nome do bloco a colocar |
 | `cook` | Cozinha um item cru num forno por perto (exige combustível no inventário) | nome do item cru, ex. `beef` |
 | `explore` | Anda numa direção nova, pra sair da área já vista | não usado |
+| `hunt` | Caça o animal mais próximo (vaca, porco, galinha...), pra conseguir carne crua | não usado |
+| `fight` | Enfrenta a ameaça hostil mais próxima em vez de fugir — recua sozinho se a vida ficar crítica no meio da luta | não usado |
+| `bow` | Atira com arco e flecha na ameaça mais próxima (exige arco + flecha no inventário) | não usado |
+| `plant` | Planta uma semente do inventário numa terra arável já existente | não usado |
+| `swim` | Vai deliberadamente até a água mais próxima e atravessa | não usado |
 | `teach` | Oferece ensinar uma skill que já sabe a outro agente, por um preço que ele mesmo decide | nome de quem recebe a oferta (+ `skill` e `price`) |
 
 Cada decisão do Controller já recebe uma lista de **recursos reconhecidos nas proximidades** (`oak_log`, `stone`, `crafting_table`, `furnace`, etc. — o que `bot.findBlock` encontrar num raio de 24 blocos), pra ele ter opções concretas em vez de chutar um nome de bloco às cegas.
@@ -220,7 +230,7 @@ Cada decisão do Controller já recebe uma lista de **recursos reconhecidos nas 
 
 ### Skills aprendidas, moeda e ensino entre agentes
 
-`mine`, `craft`, `place` e `cook` (e, mais pra frente, as skills de combate/sobrevivência) são **"gated"** — não é porque a skill existe no código que qualquer agente já sabe usá-la. Sobrevivência (`flee`, `eat`, `follow`, `explore`, `idle`, `speak`) nunca é gated, por design: não pode depender de aprendizado.
+`mine`, `craft`, `place`, `cook`, `hunt`, `fight`, `bow`, `plant` e `swim` são **"gated"** — não é porque a skill existe no código que qualquer agente já sabe usá-la. Sobrevivência (`flee`, `eat`, `follow`, `explore`, `idle`, `speak`) nunca é gated, por design: não pode depender de aprendizado.
 
 - **Kit inicial aleatório**: na primeira vez que um agente sobe (nunca de novo depois disso), sorteia 2 das skills gated como já conhecidas. As outras precisam ser aprendidas.
 - **Aprender praticando**: se o Controller decide uma ação que o agente ainda não sabe, ele tenta mesmo assim — cada tentativa tem uma chance de dar certo que cresce com o número de tentativas (`memory/skills.js`), até destravar de vez na 8ª. Sem saber, uma tentativa malsucedida não executa a ação de verdade, só soma progresso.
@@ -274,7 +284,9 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 
 ## Limitações conhecidas (honestidade de pesquisa)
 
-- **Caçar, plantar, nadar, lutar e usar arco ainda não existem como skills.** O sistema de conhecimento/moeda (kit inicial, prática, ensino) já suporta esses nomes em `memory/skills.js` (`GATED_SKILLS`), mas as implementações reais em `skills/` ainda não foram escritas — é a próxima etapa.
+- **`swim` não muda a política geral de movimento.** É uma ação explícita (vai até a água e atravessa) — as outras skills continuam evitando água pelo custo padrão do `Movements`, não existe ainda uma noção de "não sei nadar, então evito água em qualquer situação".
+- **`plant` não sabe preparar terra.** Só planta em farmland já existente — tilling (enxada + terra) não está implementado.
+- **`hunt`/`fight` têm uma rede de segurança de 20 ataques**, não perseguem o alvo indefinidamente se ele fugir pra longe ou se esconder.
 - **`!teach` confia no aluno.** O aprendizado só é creditado pro professor quando o aluno manda `!teach-accept` — mas nada impede, em teoria, alguém editar o código do próprio agente pra mandar essa mensagem sem ter pago de verdade. Pra um protótipo de pesquisa isso é aceitável; não é um sistema à prova de má-fé entre participantes adversariais.
 - **Chat é global no servidor vanilla, não por proximidade real do jogo.** O protocolo de ensino aplica seu próprio filtro de distância (16 blocos) em código, mas isso é uma aproximação nossa — não uma restrição de fato do canal de chat do Minecraft.
 - **STM ainda é ingênua.** `workingMemory.js` é um buffer circular em RAM sem nenhuma lógica de resumo — a consolidação lê ele cru.
