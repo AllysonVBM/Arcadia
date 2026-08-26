@@ -14,6 +14,15 @@ const { startCognitiveController } = require('./core/cognitive-controller.js')
 const { startDashboard } = require('./dashboard/server.js')
 const { startViewer } = require('./dashboard/viewer.js')
 const { startConsolidation } = require('./memory/consolidate.js')
+const { getActiveScenario, getAgentEntry } = require('./config/scenario_cfg.js')
+const goTo = require('./skills/goTo.js')
+
+const scenario = getActiveScenario()
+const scenarioAgent = getAgentEntry(scenario, agentConfig.name)
+
+if (scenario && !scenarioAgent) {
+  throw new Error(`O cenário "${scenario.id}" não inclui a identidade "${agentConfig.name}"`)
+}
 
 const bot = mineflayer.createBot({
   host: serverConfig.host,
@@ -111,6 +120,11 @@ bot.once('spawn', () => {
   stopConsolidation = startConsolidation(bot.username)
   dashboard = startDashboard(bot, { port: agentConfig.dashboardPort, viewerPort: agentConfig.viewerPort })
   startViewer(bot, { port: agentConfig.viewerPort })
+
+  if (scenarioAgent) {
+    bot.chat(`Cenário ativo: ${scenario.id}. Indo pra minha área.`)
+    goTo(bot, scenarioAgent.spawnArea)
+  }
 })
 
 function shutdown() {

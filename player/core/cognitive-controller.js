@@ -11,6 +11,7 @@ const persona = require('../identity/index.js')
 const llmConfig = require('../config/llm_cfg.js')
 const dispatchIntent = require('./output.js')
 const longTermMemory = require('../memory/longTermMemory.js')
+const { getActiveScenario } = require('../config/scenario_cfg.js')
 
 async function buildContext(bot) {
   const health = blackboard.get('health')
@@ -47,6 +48,11 @@ async function buildContext(bot) {
     ? relevantMemories.map((m) => `- ${m.content}`).join('\n')
     : '(nenhuma memória relevante encontrada)'
 
+  const scenario = getActiveScenario()
+  const objectivesText = scenario
+    ? scenario.objectives.map((o, i) => `${i + 1}. ${o}`).join('\n')
+    : '(nenhum cenário ativo — sem objetivos atribuídos)'
+
   return `Estado atual:
 - Vida: ${health ?? '?'}/20
 - Fome: ${hunger ?? '?'}/20
@@ -58,7 +64,12 @@ Eventos recentes:
 ${recentEvents}
 
 Memórias de longo prazo relevantes:
-${memoriesText}`
+${memoriesText}
+
+Objetivos${scenario ? ` do cenário "${scenario.id}"` : ''}:
+${objectivesText}
+
+Lembrete: sobrevivência é sempre prioridade máxima, acima de qualquer objetivo listado acima. Só persiga um objetivo quando não estiver em perigo.`
 }
 
 function parseDecision(raw) {

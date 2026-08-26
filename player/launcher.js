@@ -7,17 +7,29 @@
 // pode ser lançado, não conhecimento compartilhado em tempo de execução.
 //
 // Uso:
-//   node player/launcher.js              # sobe todo mundo do roster
-//   node player/launcher.js Pepper       # só o agente isolado
-//   node player/launcher.js Pepper Atena # a dupla
+//   node player/launcher.js                        # sobe todo mundo do roster
+//   node player/launcher.js Pepper                  # só o agente isolado
+//   node player/launcher.js Pepper Atena             # a dupla
+//   SCENARIO_ID=quinteto node player/launcher.js     # todo mundo listado no cenário
 
 const { fork } = require('child_process')
 const path = require('path')
 const roster = require('./config/player_cfg.js')
+const { scenarios } = require('./config/scenario_cfg.js')
 
 const CONNECT_PATH = path.join(__dirname, 'connect.js')
 
 function resolveNames(args) {
+  if (args.length === 0 && process.env.SCENARIO_ID) {
+    const scenario = scenarios[process.env.SCENARIO_ID]
+    if (!scenario) {
+      throw new Error(
+        `Cenário "${process.env.SCENARIO_ID}" não existe (disponíveis: ${Object.keys(scenarios).join(', ')})`
+      )
+    }
+    return scenario.agents.map((entry) => entry.name)
+  }
+
   if (args.length === 0) return roster.map((entry) => entry.name)
 
   const valid = new Set(roster.map((entry) => entry.name))

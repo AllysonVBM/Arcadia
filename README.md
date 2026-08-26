@@ -63,15 +63,24 @@ player/
 ├── config/
 │   ├── player_cfg.js             # roster: identidade + porta de dashboard/viewer
 │   ├── agent_cfg.js              # qual identidade este processo roda (env AGENT_NAME)
+│   ├── scenario_cfg.js           # qual cenário está ativo (env SCENARIO_ID)
 │   └── llm_cfg.js                # host/modelo/temperatura do Ollama
 ├── identity/
 │   ├── index.js                  # carrega a persona certa pra identidade configurada
 │   ├── responseContract.js       # formato JSON de resposta, igual pra qualquer persona
 │   └── personas/
 │       ├── pepper.js             # curiosa, direta, fala pouco
-│       └── atena.js              # cautelosa, sociável, prioriza avisar os outros
+│       ├── atena.js              # cautelosa, sociável, prioriza avisar os outros
+│       ├── milo.js               # metódico, prático, foca em construir/organizar
+│       ├── vex.js                # aventureiro, tolera mais risco que a média
+│       └── sol.js                # cuidadosa com o bem-estar do grupo, compartilha recursos
+├── scenarios/
+│   ├── isolado.js                # caso 1: um agente sozinho
+│   ├── dupla.js                  # caso 2: dois agentes juntos
+│   └── quinteto.js               # caso 3: cinco agentes juntos
 ├── state/
 │   ├── blackboard.js             # Agent State: Map com get/set/has/delete
+│   ├── reflexLock.js             # trava de sobrevivência contra o Controller
 │   └── validators/
 │       ├── status.js             # isHealthCritical, isHungry
 │       └── threat.js             # detecção de mob hostil por perto
@@ -82,7 +91,8 @@ player/
 ├── skills/
 │   ├── flee.js                   # foge da ameaça mais próxima
 │   ├── eat.js                    # come o primeiro item comestível do inventário
-│   └── follow.js                 # segue um jogador continuamente
+│   ├── follow.js                 # segue um jogador continuamente
+│   └── goTo.js                   # vai até uma coordenada (usada pela área de spawn do cenário)
 ├── memory/
 │   ├── workingMemory.js          # STM: buffer circular de eventos recentes (RAM)
 │   ├── db.js                     # abre/cria data/<agente>/memory.sqlite (node:sqlite)
@@ -161,6 +171,25 @@ Cada agente sobe seu próprio dashboard/viewer na porta definida em `player_cfg.
 
 `Ctrl+C` no lançador manda `SIGINT` pra cada filho, que se desconecta do servidor antes de sair — sem isso o bot fica "fantasma" logado por alguns segundos.
 
+### Cenários de teste
+
+Os 3 casos de teste do projeto (`player/scenarios/`), cada um com área de spawn por agente e uma lista de objetivos:
+
+| Cenário | Agentes | Objetivo do caso |
+|---|---|---|
+| `isolado` | Pepper | 1 agente sobrevivendo sozinho |
+| `dupla` | Pepper, Atena | 2 agentes na mesma área |
+| `quinteto` | Pepper, Atena, Milo, Vex, Sol | 5 agentes na mesma área |
+
+```bash
+SCENARIO_ID=isolado npm run swarm
+SCENARIO_ID=quinteto npm run swarm
+```
+
+Com um cenário ativo, cada agente vai automaticamente até a própria área de spawn ao nascer (`skills/goTo.js`), e os objetivos entram no contexto que o Cognitive Controller lê a cada decisão — junto com um lembrete explícito de que sobrevivência vem antes de qualquer objetivo. **Objetivos são informativos, não verificados automaticamente ainda** — não existe hoje um motor que detecte "abrigo construído" sozinho; isso fica pra um passo futuro de goals/subgoals de verdade.
+
+A prioridade de sobrevivência agora é uma trava de código, não só uma instrução de prompt: `state/reflexLock.js` é adquirida sempre que o reflexo age (fugir/comer), e `core/output.js` recusa despachar `flee`/`eat`/`follow` do Cognitive Controller enquanto ela estiver ativa — a fala ainda passa, só a ação física é bloqueada.
+
 ### Comandos de chat (debug manual)
 
 | Comando | O que faz |
@@ -196,8 +225,7 @@ Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorad
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
 - **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.
 - **Sem índice vetorial.** `recall()` calcula similaridade de cosseno contra *todas* as memórias do agente a cada chamada — funciona bem até a casa de milhares de entradas; se um agente viver muito tempo isso pode precisar de um índice de verdade (sqlite-vec ou similar) mais pra frente.
-- **Só 2 identidades no roster.** `Pepper` e `Atena` — o caso de teste com 5 agentes precisa de mais 3 personas novas antes de rodar (`identity/personas/*.js` + entrada em `player_cfg.js`); o mecanismo do lançador já suporta qualquer N.
-- **Sem trava de sobrevivência contra o Controller.** O reflexo nunca espera o Controller, mas nada impede hoje o Controller despachar um `follow`/`idle` bem no meio de um `flee` em andamento e os dois disputarem o `pathfinder.setGoal` — fica pra Fase de cenários com objetivos.
+- **Objetivos são informativos, não verificados.** O cenário injeta a lista de objetivos no contexto do Controller, mas não existe detecção automática de "objetivo concluído" — não há motor de goals/subgoals de verdade ainda.
 - **Dashboard sem agregação entre processos.** Com `npm run swarm`, cada agente sobe seu próprio painel numa porta separada — hoje é preciso uma aba por agente, não existe visão única.
 - **Social Awareness e Goal Generation** (PIANO) dependem de 2+ agentes no mesmo mundo interagindo de fato — ainda não implementados. O isolamento de LTM e o lançador multiagente já foram construídos pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
 - **Servidores com mods**: o mineflayer enxerga o mundo pelo protocolo vanilla via [`minecraft-data`](https://github.com/PrismarineJS/minecraft-data) — blocos/entidades customizados por mods que não estão nesse registro podem confundir o pathfinder (custo de movimento incorreto, dificuldade pra pular certos blocos).
@@ -214,7 +242,7 @@ O projeto segue um roteiro em fases, cada uma só começando quando a anterior s
 5. **LTM isolada por agente** — memória de longo prazo persistida, sem conhecimento cross-agente a priori ✅
 6. **Personas por agente** — uma identidade/personalidade própria por processo ✅
 7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo ✅
-8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo *(pendente)*
+8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo ✅
 9. **Profissão emergente** — reflexão de baixa frequência sobre a LTM do próprio agente, decidindo/reafirmando uma profissão *(pendente)*
 
 ## Referências

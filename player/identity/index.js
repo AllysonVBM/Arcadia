@@ -7,6 +7,9 @@ const agentConfig = require('../config/agent_cfg.js')
 const personas = {
   Pepper: require('./personas/pepper.js'),
   Atena: require('./personas/atena.js'),
+  Milo: require('./personas/milo.js'),
+  Vex: require('./personas/vex.js'),
+  Sol: require('./personas/sol.js'),
 }
 
 const persona = personas[agentConfig.name]

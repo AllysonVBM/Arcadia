@@ -8,4 +8,7 @@
 module.exports = [
   { name: 'Pepper', dashboardPort: 4000, viewerPort: 3007 },
   { name: 'Atena', dashboardPort: 4001, viewerPort: 3008 },
+  { name: 'Milo', dashboardPort: 4002, viewerPort: 3009 },
+  { name: 'Vex', dashboardPort: 4003, viewerPort: 3010 },
+  { name: 'Sol', dashboardPort: 4004, viewerPort: 3011 },
 ]
