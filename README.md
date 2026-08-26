@@ -78,9 +78,13 @@ player/
 │   ├── eat.js                    # come o primeiro item comestível do inventário
 │   └── follow.js                 # segue um jogador continuamente
 ├── memory/
-│   └── workingMemory.js          # buffer circular de eventos recentes (RAM)
+│   ├── workingMemory.js          # STM: buffer circular de eventos recentes (RAM)
+│   ├── db.js                     # abre/cria data/<agente>/memory.sqlite (node:sqlite)
+│   ├── longTermMemory.js         # LTM: remember/recall, score por recência+relevância+importância
+│   └── consolidate.js            # loop lento que resume STM -> LTM via LLM
 ├── llm/
-│   └── ollamaClient.js           # cliente mínimo do endpoint /api/chat do Ollama
+│   ├── ollamaClient.js           # cliente mínimo do endpoint /api/chat do Ollama
+│   └── embeddings.js             # cliente mínimo do endpoint /api/embeddings do Ollama
 ├── dashboard/
 │   ├── server.js                 # HTTP + WebSocket, transmite o estado do agente em tempo real
 │   ├── viewer.js                 # liga o prismarine-viewer (visão 3D do que o bot vê)
@@ -95,13 +99,14 @@ player/
 
 ### Pré-requisitos
 
-- Node.js 18+ (usa `fetch` nativo — sem SDK de LLM como dependência)
+- **Node.js 22.5+** (usa `fetch` nativo e o módulo nativo `node:sqlite` — verificado no Node 24; nenhuma versão do projeto usa driver de banco como dependência externa)
 - Um servidor Minecraft acessível (o agente conecta como cliente, via protocolo — não precisa de mod nenhum instalado no servidor)
 - `canvas` (dependência do `prismarine-viewer`, usada pra visão 3D) baixa um binário pré-compilado no `npm install` na maioria das plataformas; se falhar na sua, é a única dependência do projeto que pode exigir toolchain nativo (Python + compilador C++)
-- [Ollama](https://ollama.com) instalado e rodando localmente, com um modelo já baixado:
+- [Ollama](https://ollama.com) instalado e rodando localmente, com um modelo de chat e um de embeddings já baixados:
 
 ```bash
 ollama pull llama3.1
+ollama pull nomic-embed-text
 ```
 
 ### Instalação
@@ -147,12 +152,21 @@ Assim que o agente nasce no mundo, dois servidores locais sobem junto com ele �
 
 Hoje o painel mostra um agente porque só existe um agente rodando; ele já foi escrito pra renderizar quantos agentes reportarem a ele (chave por nome) — a extensão pra múltiplos processos é a Etapa do lançador multiagente, ainda não implementada (ver Roteiro).
 
+### Memória de longo prazo (LTM)
+
+Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorada pelo git — é estado de execução, não código). Não existe coluna ou tabela compartilhada entre agentes: **o arquivo em si é o limite de isolamento**. Um agente só grava algo sobre outro quando percebe isso de fato no jogo (ouviu no chat, por exemplo) — nunca por configuração.
+
+- **Escrita**: a cada ~2min, `consolidate.js` manda os eventos recentes (working memory) pra LLM e pede pra decidir o que vale virar memória de longo prazo, com uma nota de importância de 1 a 10. A maioria dos ciclos não gera memória nenhuma — isso é esperado.
+- **Leitura**: `longTermMemory.recall(agente, consulta)` pontua cada memória por **recência + relevância + importância** (mesma fórmula de Park et al., *Generative Agents*, 2023) e devolve as mais relevantes. O Cognitive Controller já usa isso automaticamente a cada decisão.
+- **Relevância** é calculada por similaridade de cosseno entre embeddings (`nomic-embed-text` via Ollama) — sem extensão de banco vetorial; na escala de memória de um agente isso é rápido o suficiente calculado em JS puro.
+
 ## Limitações conhecidas (honestidade de pesquisa)
 
-- **Memory é um placeholder.** `workingMemory.js` é só um buffer circular em RAM sem persistência — não existe ainda memória de curto/longo prazo sobrevivendo a um restart do processo.
+- **STM ainda é ingênua.** `workingMemory.js` é um buffer circular em RAM sem nenhuma lógica de resumo — a consolidação lê ele cru.
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
-- **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"`. Quando isso acontece, o Controller loga o erro e simplesmente pula aquele ciclo — não derruba o processo, mas também não decide nada naquele tick.
-- **Um agente só.** Social Awareness e Goal Generation (PIANO) dependem de 2+ agentes no mesmo mundo; `player_cfg.js` já lista uma segunda identidade (`Atena`) para quando isso for retomado.
+- **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.
+- **Sem índice vetorial.** `recall()` calcula similaridade de cosseno contra *todas* as memórias do agente a cada chamada — funciona bem até a casa de milhares de entradas; se um agente viver muito tempo isso pode precisar de um índice de verdade (sqlite-vec ou similar) mais pra frente.
+- **Um agente só, por design.** Social Awareness e Goal Generation (PIANO) dependem de 2+ agentes no mesmo mundo; `player_cfg.js` já lista uma segunda identidade (`Atena`). O isolamento de LTM já foi construído pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
 - **Servidores com mods**: o mineflayer enxerga o mundo pelo protocolo vanilla via [`minecraft-data`](https://github.com/PrismarineJS/minecraft-data) — blocos/entidades customizados por mods que não estão nesse registro podem confundir o pathfinder (custo de movimento incorreto, dificuldade pra pular certos blocos).
 
 ## Roteiro
@@ -164,7 +178,7 @@ O projeto segue um roteiro em fases, cada uma só começando quando a anterior s
 2. **Skill Execution formal** — biblioteca de ações com contrato de expectativa *(parcial)*
 3. **Cognitive Controller** — LLM local (Ollama) decidindo a ação de alto nível ✅
 4. **Painel de observação** — dashboard web + visão 3D em tempo real ✅
-5. **LTM isolada por agente** — memória de longo prazo persistida, sem conhecimento cross-agente a priori *(pendente)*
+5. **LTM isolada por agente** — memória de longo prazo persistida, sem conhecimento cross-agente a priori ✅
 6. **Personas por agente** — uma identidade/personalidade própria por processo *(pendente)*
 7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo *(pendente)*
 8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo *(pendente)*

@@ -12,6 +12,7 @@ const workingMemory = require('./memory/workingMemory.js')
 const { startCognitiveController } = require('./core/cognitive-controller.js')
 const { startDashboard } = require('./dashboard/server.js')
 const { startViewer } = require('./dashboard/viewer.js')
+const { startConsolidation } = require('./memory/consolidate.js')
 
 const bot = mineflayer.createBot({
   host: serverConfig.host,
@@ -99,17 +100,20 @@ bot.on('physicTick', () => {
 
 // Cognitive Controller: só começa a decidir sozinho depois que o bot de fato
 // nasceu no mundo (antes disso não há estado nenhum pra ler).
-// Dashboard + viewer 3D: mesma lógica, só fazem sentido depois do spawn.
+// Dashboard + viewer 3D + consolidação de memória: mesma lógica.
 let stopCognitiveController = null
+let stopConsolidation = null
 let dashboard = null
 
 bot.once('spawn', () => {
   stopCognitiveController = startCognitiveController(bot)
+  stopConsolidation = startConsolidation(bot.username)
   dashboard = startDashboard(bot, { port: 4000, viewerPort: 3007 })
   startViewer(bot, { port: 3007 })
 })
 
 bot.on('end', () => {
   if (stopCognitiveController) stopCognitiveController()
+  if (stopConsolidation) stopConsolidation()
   if (dashboard) dashboard.stop()
 })

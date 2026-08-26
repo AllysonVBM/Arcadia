@@ -10,8 +10,9 @@ const ollama = require('../llm/ollamaClient.js')
 const persona = require('../identity/persona.js')
 const llmConfig = require('../config/llm_cfg.js')
 const dispatchIntent = require('./output.js')
+const longTermMemory = require('../memory/longTermMemory.js')
 
-function buildContext(bot) {
+async function buildContext(bot) {
   const health = blackboard.get('health')
   const hunger = blackboard.get('hunger')
   const position = blackboard.get('position')
@@ -27,6 +28,25 @@ function buildContext(bot) {
     ? workingMemory.map((e) => `[${e.who}] ${e.text}`).join('\n')
     : '(nenhum evento recente)'
 
+  // LTM: busca por relevância ao que está acontecendo agora. Se não houver
+  // eventos recentes pra usar como consulta, ou a LTM ainda estiver vazia
+  // ou o Ollama estiver fora do ar, segue sem essa seção — nunca bloqueia
+  // a decisão por causa da memória de longo prazo.
+  let relevantMemories = []
+  const query = workingMemory.length ? workingMemory[workingMemory.length - 1].text : null
+
+  if (query) {
+    try {
+      relevantMemories = await longTermMemory.recall(bot.username, query, { limit: 3 })
+    } catch (err) {
+      console.error('[cognitive-controller] falha ao recuperar LTM:', err.message)
+    }
+  }
+
+  const memoriesText = relevantMemories.length
+    ? relevantMemories.map((m) => `- ${m.content}`).join('\n')
+    : '(nenhuma memória relevante encontrada)'
+
   return `Estado atual:
 - Vida: ${health ?? '?'}/20
 - Fome: ${hunger ?? '?'}/20
@@ -35,7 +55,10 @@ function buildContext(bot) {
 - Inventário: ${inventorySummary}
 
 Eventos recentes:
-${recentEvents}`
+${recentEvents}
+
+Memórias de longo prazo relevantes:
+${memoriesText}`
 }
 
 function parseDecision(raw) {
@@ -50,7 +73,7 @@ function parseDecision(raw) {
 
 async function controllerTick(bot) {
   try {
-    const context = buildContext(bot)
+    const context = await buildContext(bot)
 
     const raw = await ollama.chat([
       { role: 'system', content: persona.systemPrompt },
