@@ -284,8 +284,13 @@
         ? `<div class="inv-list">${data.inventory.map((i) => `<span class="inv-item">${escapeHtml(String(i.count ?? ''))}x ${escapeHtml(i.name || i.displayName || '?')}</span>`).join('')}</div>`
         : '<p class="empty">Inventário vazio.</p>'
 
+      const professionText = data.profession
+        ? escapeHtml(data.profession)
+        : 'profissão ainda não definida'
+
       el.innerHTML = `
         <div class="agent-name">${escapeHtml(name)} ${badges.join(' ')}</div>
+        <div class="stat-label" style="margin-bottom:0.7rem">${professionText}</div>
         <div class="stats">
           <div>
             <div class="stat-label">Vida</div>

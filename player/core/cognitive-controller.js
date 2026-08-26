@@ -16,6 +16,7 @@ const { getActiveScenario } = require('../config/scenario_cfg.js')
 async function buildContext(bot) {
   const health = blackboard.get('health')
   const hunger = blackboard.get('hunger')
+  const profession = blackboard.get('profession')
   const position = blackboard.get('position')
   const inventory = blackboard.get('inventory') || []
   const workingMemory = blackboard.get('memory.working') || []
@@ -56,6 +57,7 @@ async function buildContext(bot) {
   return `Estado atual:
 - Vida: ${health ?? '?'}/20
 - Fome: ${hunger ?? '?'}/20
+- Profissão: ${profession || 'ainda não definida'}
 - Posição: ${position ? `${position.x}, ${position.y}, ${position.z}` : '?'}
 - Ameaça hostil por perto: ${threatNearby ? 'sim' : 'não'}
 - Inventário: ${inventorySummary}

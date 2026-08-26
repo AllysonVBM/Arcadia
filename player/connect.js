@@ -14,6 +14,7 @@ const { startCognitiveController } = require('./core/cognitive-controller.js')
 const { startDashboard } = require('./dashboard/server.js')
 const { startViewer } = require('./dashboard/viewer.js')
 const { startConsolidation } = require('./memory/consolidate.js')
+const { startProfessionReflection } = require('./core/profession-reflection.js')
 const { getActiveScenario, getAgentEntry } = require('./config/scenario_cfg.js')
 const goTo = require('./skills/goTo.js')
 
@@ -113,11 +114,13 @@ bot.on('physicTick', () => {
 // Dashboard + viewer 3D + consolidação de memória: mesma lógica.
 let stopCognitiveController = null
 let stopConsolidation = null
+let stopProfessionReflection = null
 let dashboard = null
 
 bot.once('spawn', () => {
   stopCognitiveController = startCognitiveController(bot)
   stopConsolidation = startConsolidation(bot.username)
+  stopProfessionReflection = startProfessionReflection(bot.username)
   dashboard = startDashboard(bot, { port: agentConfig.dashboardPort, viewerPort: agentConfig.viewerPort })
   startViewer(bot, { port: agentConfig.viewerPort })
 
@@ -130,6 +133,7 @@ bot.once('spawn', () => {
 function shutdown() {
   if (stopCognitiveController) stopCognitiveController()
   if (stopConsolidation) stopConsolidation()
+  if (stopProfessionReflection) stopProfessionReflection()
   if (dashboard) dashboard.stop()
 }
 

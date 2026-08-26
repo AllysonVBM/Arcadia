@@ -24,6 +24,7 @@ function buildSnapshot(bot) {
     data: {
       health: blackboard.get('health') ?? null,
       hunger: blackboard.get('hunger') ?? null,
+      profession: blackboard.get('profession') ?? null,
       position: blackboard.get('position') ?? null,
       inventory: blackboard.get('inventory') || [],
       threatNearby: hasHostileNearby(bot),

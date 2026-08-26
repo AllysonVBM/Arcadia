@@ -8,4 +8,5 @@ module.exports = {
   temperature: 0.7,
   tickIntervalMs: 15000, // a cada 15s — modelo local não aguenta a cadência de um tick de jogo
   consolidationIntervalMs: 120000, // a cada 2min — STM -> LTM, ainda mais lento que o Controller
+  professionIntervalMs: 600000, // a cada 10min — reflexão de identidade, mais lenta que tudo
 }

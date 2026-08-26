@@ -97,6 +97,7 @@ player/
 │   ├── workingMemory.js          # STM: buffer circular de eventos recentes (RAM)
 │   ├── db.js                     # abre/cria data/<agente>/memory.sqlite (node:sqlite)
 │   ├── longTermMemory.js         # LTM: remember/recall, score por recência+relevância+importância
+│   ├── profile.js                # fatos de identidade persistentes (ex.: profissão)
 │   └── consolidate.js            # loop lento que resume STM -> LTM via LLM
 ├── llm/
 │   ├── ollamaClient.js           # cliente mínimo do endpoint /api/chat do Ollama
@@ -108,6 +109,7 @@ player/
 └── core/
     ├── reflex-loop.js            # heurísticas locais, sem LLM
     ├── cognitive-controller.js   # loop que chama o LLM e decide current_intent
+    ├── profession-reflection.js  # reflexão lenta sobre a LTM, decide/reafirma profissão
     └── output.js                 # único ponto que executa current_intent
 ```
 
@@ -219,13 +221,20 @@ Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorad
 - **Leitura**: `longTermMemory.recall(agente, consulta)` pontua cada memória por **recência + relevância + importância** (mesma fórmula de Park et al., *Generative Agents*, 2023) e devolve as mais relevantes. O Cognitive Controller já usa isso automaticamente a cada decisão.
 - **Relevância** é calculada por similaridade de cosseno entre embeddings (`nomic-embed-text` via Ollama) — sem extensão de banco vetorial; na escala de memória de um agente isso é rápido o suficiente calculado em JS puro.
 
+### Profissão emergente
+
+A cada ~10min (bem mais devagar que qualquer outro loop do projeto), `core/profession-reflection.js` pega uma amostra ampla da própria LTM — não é busca por relevância a uma pergunta específica, é uma visão geral da trajetória — e pergunta à LLM se algo mudou o suficiente pra decidir ou reafirmar uma profissão (`"minerador"`, `"fazendeiro"`, o que fizer sentido pelo que o agente realmente viveu). A decisão fica persistida em `data/<nome>/memory.sqlite` (tabela `profile`, sobrevive a restart) e passa a aparecer no contexto que o Cognitive Controller lê a cada decisão — e no painel de observação.
+
+Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda quando há alguma coisa pra de fato refletir sobre.
+
 ## Limitações conhecidas (honestidade de pesquisa)
 
 - **STM ainda é ingênua.** `workingMemory.js` é um buffer circular em RAM sem nenhuma lógica de resumo — a consolidação lê ele cru.
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
 - **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.
 - **Sem índice vetorial.** `recall()` calcula similaridade de cosseno contra *todas* as memórias do agente a cada chamada — funciona bem até a casa de milhares de entradas; se um agente viver muito tempo isso pode precisar de um índice de verdade (sqlite-vec ou similar) mais pra frente.
-- **Objetivos são informativos, não verificados.** O cenário injeta a lista de objetivos no contexto do Controller, mas não existe detecção automática de "objetivo concluído" — não há motor de goals/subgoals de verdade ainda.
+- **Vocabulário de ações ainda é curto demais pra a maioria dos objetivos dos cenários.** O Cognitive Controller só pode escolher entre `flee`, `eat`, `follow`, `idle`, `speak` (`identity/responseContract.js`) — não existe `mine`, `build`, `craft` nem `plant`. Os objetivos dos cenários ("construir abrigo", "craftar ferramentas") entram no contexto como texto, mas hoje **não há como o agente de fato executar a maioria deles** — isso é a lacuna mais importante pra fechar antes de qualquer teste de verdade com os 3 casos.
+- **Objetivos são informativos, não verificados.** Mesmo quando a skill existir, não há detecção automática de "objetivo concluído" — não há motor de goals/subgoals de verdade ainda.
 - **Dashboard sem agregação entre processos.** Com `npm run swarm`, cada agente sobe seu próprio painel numa porta separada — hoje é preciso uma aba por agente, não existe visão única.
 - **Social Awareness e Goal Generation** (PIANO) dependem de 2+ agentes no mesmo mundo interagindo de fato — ainda não implementados. O isolamento de LTM e o lançador multiagente já foram construídos pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
 - **Servidores com mods**: o mineflayer enxerga o mundo pelo protocolo vanilla via [`minecraft-data`](https://github.com/PrismarineJS/minecraft-data) — blocos/entidades customizados por mods que não estão nesse registro podem confundir o pathfinder (custo de movimento incorreto, dificuldade pra pular certos blocos).
@@ -243,7 +252,7 @@ O projeto segue um roteiro em fases, cada uma só começando quando a anterior s
 6. **Personas por agente** — uma identidade/personalidade própria por processo ✅
 7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo ✅
 8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo ✅
-9. **Profissão emergente** — reflexão de baixa frequência sobre a LTM do próprio agente, decidindo/reafirmando uma profissão *(pendente)*
+9. **Profissão emergente** — reflexão de baixa frequência sobre a LTM do próprio agente, decidindo/reafirmando uma profissão ✅
 
 ## Referências
 
