@@ -4,6 +4,7 @@
 // decisão de alto nível. A decisão vira 'current_intent' no blackboard; quem
 // executa é sempre o módulo de Output, nunca este arquivo diretamente.
 
+const mcDataLoader = require('minecraft-data')
 const blackboard = require('../state/blackboard.js')
 const { hasHostileNearby } = require('../state/validators/threat.js')
 const ollama = require('../llm/ollamaClient.js')
@@ -12,6 +13,30 @@ const llmConfig = require('../config/llm_cfg.js')
 const dispatchIntent = require('./output.js')
 const longTermMemory = require('../memory/longTermMemory.js')
 const { getActiveScenario } = require('../config/scenario_cfg.js')
+
+// Recursos comuns que valem a pena mencionar pro Controller ter opções
+// concretas de "mine"/"craft"/"cook" em vez de chutar um nome de bloco às
+// cegas. Só verifica presença (achou/não achou), não posição — mais barato
+// e é o suficiente pro contexto.
+const RESOURCE_BLOCKS = ['oak_log', 'stone', 'coal_ore', 'iron_ore', 'crafting_table', 'furnace', 'water']
+const RESOURCE_SCAN_RADIUS = 24
+
+function scanNearbyResources(bot) {
+  try {
+    const mcData = mcDataLoader(bot.version)
+    const found = []
+    for (const name of RESOURCE_BLOCKS) {
+      const blockType = mcData.blocksByName[name]
+      if (!blockType) continue
+      const block = bot.findBlock({ matching: blockType.id, maxDistance: RESOURCE_SCAN_RADIUS })
+      if (block) found.push(name)
+    }
+    return found
+  } catch (err) {
+    console.error('[cognitive-controller] falha ao escanear recursos próximos:', err.message)
+    return []
+  }
+}
 
 async function buildContext(bot) {
   const health = blackboard.get('health')
@@ -54,6 +79,11 @@ async function buildContext(bot) {
     ? scenario.objectives.map((o, i) => `${i + 1}. ${o}`).join('\n')
     : '(nenhum cenário ativo — sem objetivos atribuídos)'
 
+  const nearbyResources = scanNearbyResources(bot)
+  const resourcesText = nearbyResources.length
+    ? nearbyResources.join(', ')
+    : '(nada reconhecido nas proximidades já exploradas — considere "explore")'
+
   return `Estado atual:
 - Vida: ${health ?? '?'}/20
 - Fome: ${hunger ?? '?'}/20
@@ -61,6 +91,7 @@ async function buildContext(bot) {
 - Posição: ${position ? `${position.x}, ${position.y}, ${position.z}` : '?'}
 - Ameaça hostil por perto: ${threatNearby ? 'sim' : 'não'}
 - Inventário: ${inventorySummary}
+- Recursos reconhecidos nas proximidades: ${resourcesText}
 
 Eventos recentes:
 ${recentEvents}

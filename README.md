@@ -48,10 +48,11 @@ Dois loops rodam em paralelo, em velocidades diferentes — o princípio de **co
 | Agent State | [`player/state/blackboard.js`](player/state/blackboard.js) |
 | Heurísticas locais / concorrência | [`player/state/validators/`](player/state/validators/) + [`player/core/reflex-loop.js`](player/core/reflex-loop.js) |
 | Skill Execution | [`player/skills/`](player/skills/) |
-| Memory | [`player/memory/`](player/memory/) *(placeholder mínimo — ver Limitações)* |
+| Memory | [`player/memory/`](player/memory/) — STM em RAM + LTM em SQLite por agente |
 | Cognitive Controller | [`player/core/cognitive-controller.js`](player/core/cognitive-controller.js) |
 | Output / coerência | [`player/core/output.js`](player/core/output.js) |
-| Social Awareness / Goal Generation | fora de escopo — exige 2+ agentes simultâneos |
+| Social Awareness | parcial — agentes só se conhecem ouvindo o chat um do outro in-game, nunca por config (ver "Compartilhamento de conhecimento" abaixo) |
+| Goal Generation | fora de escopo — dependeria de Social Awareness completo |
 
 ## Estrutura de pastas
 
@@ -92,7 +93,12 @@ player/
 │   ├── flee.js                   # foge da ameaça mais próxima
 │   ├── eat.js                    # come o primeiro item comestível do inventário
 │   ├── follow.js                 # segue um jogador continuamente
-│   └── goTo.js                   # vai até uma coordenada (usada pela área de spawn do cenário)
+│   ├── goTo.js                   # vai até uma coordenada (usada pela área de spawn do cenário)
+│   ├── mine.js                   # acha e quebra um bloco de um tipo específico
+│   ├── craftItem.js              # crafta um item, usando mesa de trabalho se precisar
+│   ├── placeBlock.js             # constrói: coloca um bloco do inventário
+│   ├── cookItem.js               # cozinha num forno (exige combustível + item cru)
+│   └── explore.js                # anda numa direção aleatória, pra descobrir área nova
 ├── memory/
 │   ├── workingMemory.js          # STM: buffer circular de eventos recentes (RAM)
 │   ├── db.js                     # abre/cria data/<agente>/memory.sqlite (node:sqlite)
@@ -190,7 +196,27 @@ SCENARIO_ID=quinteto npm run swarm
 
 Com um cenário ativo, cada agente vai automaticamente até a própria área de spawn ao nascer (`skills/goTo.js`), e os objetivos entram no contexto que o Cognitive Controller lê a cada decisão — junto com um lembrete explícito de que sobrevivência vem antes de qualquer objetivo. **Objetivos são informativos, não verificados automaticamente ainda** — não existe hoje um motor que detecte "abrigo construído" sozinho; isso fica pra um passo futuro de goals/subgoals de verdade.
 
-A prioridade de sobrevivência agora é uma trava de código, não só uma instrução de prompt: `state/reflexLock.js` é adquirida sempre que o reflexo age (fugir/comer), e `core/output.js` recusa despachar `flee`/`eat`/`follow` do Cognitive Controller enquanto ela estiver ativa — a fala ainda passa, só a ação física é bloqueada.
+A prioridade de sobrevivência agora é uma trava de código, não só uma instrução de prompt: `state/reflexLock.js` é adquirida sempre que o reflexo age (fugir/comer), e `core/output.js` recusa despachar ações de movimento do Cognitive Controller enquanto ela estiver ativa — a fala ainda passa, só a ação física é bloqueada.
+
+### Ações disponíveis pro Cognitive Controller
+
+Além de `flee`/`eat`/`follow`/`idle`/`speak`, o Controller pode decidir:
+
+| Ação | O que faz | `target` |
+|---|---|---|
+| `mine` | Acha o bloco mais próximo do tipo pedido (dentro do que já foi explorado) e quebra | nome do bloco, ex. `oak_log`, `stone`, `iron_ore` |
+| `craft` | Crafta um item — usa mesa de trabalho se a receita exigir e houver uma por perto | nome do item, ex. `wooden_pickaxe` |
+| `place` | Constrói: coloca um bloco do inventário em cima de onde o agente está pisando | nome do bloco a colocar |
+| `cook` | Cozinha um item cru num forno por perto (exige combustível no inventário) | nome do item cru, ex. `beef` |
+| `explore` | Anda numa direção nova, pra sair da área já vista | não usado |
+
+Cada decisão do Controller já recebe uma lista de **recursos reconhecidos nas proximidades** (`oak_log`, `stone`, `crafting_table`, `furnace`, etc. — o que `bot.findBlock` encontrar num raio de 24 blocos), pra ele ter opções concretas em vez de chutar um nome de bloco às cegas.
+
+`place` é um primitivo — coloca um bloco por vez. "Construir um abrigo" continua sendo várias decisões em sequência, não uma macro única.
+
+### Compartilhamento de conhecimento entre agentes
+
+Não existe canal direto entre processos pra isso, de propósito — seguindo a regra de que um agente só conhece o outro através do que percebe no jogo. O mecanismo é o chat: toda skill nova anuncia o que fez (`"Minerei oak_log."`, `"Craftei wooden_pickaxe."`, `"Cozinhei beef."`), e qualquer agente por perto já ouve essas mensagens automaticamente (`bot.on('chat', ...)` não distingue jogador humano de outro agente) — elas entram na working memory de quem ouviu, e de lá podem virar memória de longo prazo na próxima consolidação. Dois agentes próximos, jogando por tempo suficiente, acabam sabendo o que o outro andou fazendo — sem nenhuma informação vazando por fora do jogo.
 
 ### Comandos de chat (debug manual)
 
@@ -233,8 +259,9 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
 - **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.
 - **Sem índice vetorial.** `recall()` calcula similaridade de cosseno contra *todas* as memórias do agente a cada chamada — funciona bem até a casa de milhares de entradas; se um agente viver muito tempo isso pode precisar de um índice de verdade (sqlite-vec ou similar) mais pra frente.
-- **Vocabulário de ações ainda é curto demais pra a maioria dos objetivos dos cenários.** O Cognitive Controller só pode escolher entre `flee`, `eat`, `follow`, `idle`, `speak` (`identity/responseContract.js`) — não existe `mine`, `build`, `craft` nem `plant`. Os objetivos dos cenários ("construir abrigo", "craftar ferramentas") entram no contexto como texto, mas hoje **não há como o agente de fato executar a maioria deles** — isso é a lacuna mais importante pra fechar antes de qualquer teste de verdade com os 3 casos.
-- **Objetivos são informativos, não verificados.** Mesmo quando a skill existir, não há detecção automática de "objetivo concluído" — não há motor de goals/subgoals de verdade ainda.
+- **Sem forma de conseguir comida do zero.** `mine`/`craft`/`cook` cobrem madeira, pedra, minério e cozimento — mas não há skill de caçar (atacar mob) nem plantar/colher, então se o inventário nascer vazio e não houver comida achável por aí, o agente pode ficar preso indefinidamente no reflexo de fome sem conseguir resolver a causa. É a lacuna mais importante que resta pros objetivos de "fonte de comida renovável" dos cenários.
+- **Objetivos são informativos, não verificados.** Mesmo com a skill existindo, não há detecção automática de "objetivo concluído" — não há motor de goals/subgoals de verdade ainda.
+- **`place` é um primitivo, não um planejador.** Constrói um bloco por vez, sempre em cima de onde o agente está pisando — "abrigo" ainda depende do Controller encadear várias chamadas sozinho, sem nenhuma orientação de layout.
 - **Dashboard sem agregação entre processos.** Com `npm run swarm`, cada agente sobe seu próprio painel numa porta separada — hoje é preciso uma aba por agente, não existe visão única.
 - **Social Awareness e Goal Generation** (PIANO) dependem de 2+ agentes no mesmo mundo interagindo de fato — ainda não implementados. O isolamento de LTM e o lançador multiagente já foram construídos pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
 - **Servidores com mods**: o mineflayer enxerga o mundo pelo protocolo vanilla via [`minecraft-data`](https://github.com/PrismarineJS/minecraft-data) — blocos/entidades customizados por mods que não estão nesse registro podem confundir o pathfinder (custo de movimento incorreto, dificuldade pra pular certos blocos).
