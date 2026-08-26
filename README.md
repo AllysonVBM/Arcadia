@@ -98,12 +98,15 @@ player/
 │   ├── craftItem.js              # crafta um item, usando mesa de trabalho se precisar
 │   ├── placeBlock.js             # constrói: coloca um bloco do inventário
 │   ├── cookItem.js               # cozinha num forno (exige combustível + item cru)
-│   └── explore.js                # anda numa direção aleatória, pra descobrir área nova
+│   ├── explore.js                # anda numa direção aleatória, pra descobrir área nova
+│   └── teach.js                  # oferece ensinar uma skill conhecida a outro agente
 ├── memory/
 │   ├── workingMemory.js          # STM: buffer circular de eventos recentes (RAM)
 │   ├── db.js                     # abre/cria data/<agente>/memory.sqlite (node:sqlite)
 │   ├── longTermMemory.js         # LTM: remember/recall, score por recência+relevância+importância
 │   ├── profile.js                # fatos de identidade persistentes (ex.: profissão)
+│   ├── skills.js                 # quais skills "gated" o agente conhece, prática, kit inicial
+│   ├── currency.js               # moeda por agente, usada só pra pagar por skills ensinadas
 │   └── consolidate.js            # loop lento que resume STM -> LTM via LLM
 ├── llm/
 │   ├── ollamaClient.js           # cliente mínimo do endpoint /api/chat do Ollama
@@ -209,14 +212,28 @@ Além de `flee`/`eat`/`follow`/`idle`/`speak`, o Controller pode decidir:
 | `place` | Constrói: coloca um bloco do inventário em cima de onde o agente está pisando | nome do bloco a colocar |
 | `cook` | Cozinha um item cru num forno por perto (exige combustível no inventário) | nome do item cru, ex. `beef` |
 | `explore` | Anda numa direção nova, pra sair da área já vista | não usado |
+| `teach` | Oferece ensinar uma skill que já sabe a outro agente, por um preço que ele mesmo decide | nome de quem recebe a oferta (+ `skill` e `price`) |
 
 Cada decisão do Controller já recebe uma lista de **recursos reconhecidos nas proximidades** (`oak_log`, `stone`, `crafting_table`, `furnace`, etc. — o que `bot.findBlock` encontrar num raio de 24 blocos), pra ele ter opções concretas em vez de chutar um nome de bloco às cegas.
 
 `place` é um primitivo — coloca um bloco por vez. "Construir um abrigo" continua sendo várias decisões em sequência, não uma macro única.
 
-### Compartilhamento de conhecimento entre agentes
+### Skills aprendidas, moeda e ensino entre agentes
 
-Não existe canal direto entre processos pra isso, de propósito — seguindo a regra de que um agente só conhece o outro através do que percebe no jogo. O mecanismo é o chat: toda skill nova anuncia o que fez (`"Minerei oak_log."`, `"Craftei wooden_pickaxe."`, `"Cozinhei beef."`), e qualquer agente por perto já ouve essas mensagens automaticamente (`bot.on('chat', ...)` não distingue jogador humano de outro agente) — elas entram na working memory de quem ouviu, e de lá podem virar memória de longo prazo na próxima consolidação. Dois agentes próximos, jogando por tempo suficiente, acabam sabendo o que o outro andou fazendo — sem nenhuma informação vazando por fora do jogo.
+`mine`, `craft`, `place` e `cook` (e, mais pra frente, as skills de combate/sobrevivência) são **"gated"** — não é porque a skill existe no código que qualquer agente já sabe usá-la. Sobrevivência (`flee`, `eat`, `follow`, `explore`, `idle`, `speak`) nunca é gated, por design: não pode depender de aprendizado.
+
+- **Kit inicial aleatório**: na primeira vez que um agente sobe (nunca de novo depois disso), sorteia 2 das skills gated como já conhecidas. As outras precisam ser aprendidas.
+- **Aprender praticando**: se o Controller decide uma ação que o agente ainda não sabe, ele tenta mesmo assim — cada tentativa tem uma chance de dar certo que cresce com o número de tentativas (`memory/skills.js`), até destravar de vez na 8ª. Sem saber, uma tentativa malsucedida não executa a ação de verdade, só soma progresso.
+- **Ensinar (e cobrar por isso)**: cada agente tem uma moeda própria, persistida (`memory/currency.js`, saldo inicial 10). Um agente que já sabe uma skill pode oferecer ensiná-la a outro, decidindo o próprio preço — **não existe preço fixo no código**, cada LLM decide quanto cobrar.
+
+O ensino não usa nenhum canal entre processos (não existe nenhum) — é inteiramente mediado pelo chat do jogo, com um protocolo fixo e determinístico (não interpretado por LLM, pra não depender de um modelo pequeno "entender" uma negociação em texto livre):
+
+1. O professor decide `teach` → manda `!teach <skill> <preço> <destinatário>` no chat.
+2. Só quem está fisicamente por perto (raio de 16 blocos) processa a oferta — é isso que obriga os agentes a "se encontrarem" pra negociar.
+3. Se o aluno já sabe a skill, recusa. Se não tem saldo, recusa. Se tem: debita o próprio saldo, aprende a skill (`acquired_via: 'taught'`), e responde `!teach-accept <skill> <preço> <professor>`.
+4. O professor, ao ver essa confirmação, credita o próprio saldo — só então, nunca antes.
+
+Isso também é o mecanismo de "compartilhar conhecimento" do projeto: não existe nenhum canal fora do jogo. Toda skill nova também anuncia o que fez (`"Minerei oak_log."`), e qualquer agente por perto ouve isso naturalmente — vira contexto na working memory de quem ouviu, e pode virar LTM na próxima consolidação.
 
 ### Comandos de chat (debug manual)
 
@@ -227,8 +244,10 @@ Não existe canal direto entre processos pra isso, de propósito — seguindo a 
 | `!inventory` | Lista o inventário |
 | `!life` | Reporta a vida atual |
 | `!hunger` | Reporta a fome atual |
+| `!skills` | Lista as skills gated que o agente já sabe |
+| `!currency` | Reporta o saldo de moeda atual |
 
-Esses comandos são atalhos diretos pra debug — não passam pelo Cognitive Controller nem pelo `current_intent`.
+Esses comandos são atalhos diretos pra debug — não passam pelo Cognitive Controller nem pelo `current_intent`. `!teach` e `!teach-accept` também trafegam pelo chat, mas não são comandos de debug — são o protocolo de ensino entre agentes (ver acima), e o próprio código os reconhece e processa.
 
 ### Painel de observação (dashboard)
 
@@ -255,6 +274,9 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 
 ## Limitações conhecidas (honestidade de pesquisa)
 
+- **Caçar, plantar, nadar, lutar e usar arco ainda não existem como skills.** O sistema de conhecimento/moeda (kit inicial, prática, ensino) já suporta esses nomes em `memory/skills.js` (`GATED_SKILLS`), mas as implementações reais em `skills/` ainda não foram escritas — é a próxima etapa.
+- **`!teach` confia no aluno.** O aprendizado só é creditado pro professor quando o aluno manda `!teach-accept` — mas nada impede, em teoria, alguém editar o código do próprio agente pra mandar essa mensagem sem ter pago de verdade. Pra um protótipo de pesquisa isso é aceitável; não é um sistema à prova de má-fé entre participantes adversariais.
+- **Chat é global no servidor vanilla, não por proximidade real do jogo.** O protocolo de ensino aplica seu próprio filtro de distância (16 blocos) em código, mas isso é uma aproximação nossa — não uma restrição de fato do canal de chat do Minecraft.
 - **STM ainda é ingênua.** `workingMemory.js` é um buffer circular em RAM sem nenhuma lógica de resumo — a consolidação lê ele cru.
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
 - **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.

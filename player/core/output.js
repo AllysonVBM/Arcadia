@@ -6,9 +6,14 @@
 // Sobrevivência como prioridade máxima: se o reflexo estiver com a trava
 // ativa (reflexLock), uma decisão do Controller que mexeria em movimento
 // é ignorada nesse ciclo — fala ainda passa, porque não interfere fisicamente.
+//
+// Skills "gated" (mine/craft/place/cook e as futuras hunt/plant/swim/fight/
+// bow) só executam de verdade se o agente já souber — sem saber, é uma
+// tentativa de prática (chance crescente de dar certo, ver memory/skills.js).
 
 const blackboard = require('../state/blackboard.js')
 const reflexLock = require('../state/reflexLock.js')
+const skills = require('../memory/skills.js')
 const flee = require('../skills/flee.js')
 const eat = require('../skills/eat.js')
 const follow = require('../skills/follow.js')
@@ -17,8 +22,30 @@ const craftItem = require('../skills/craftItem.js')
 const placeBlock = require('../skills/placeBlock.js')
 const cookItem = require('../skills/cookItem.js')
 const explore = require('../skills/explore.js')
+const teach = require('../skills/teach.js')
 
 const MOVEMENT_ACTIONS = new Set(['flee', 'eat', 'follow', 'mine', 'craft', 'place', 'cook', 'explore'])
+
+// Executa uma skill "gated": se o agente já sabe, roda normal. Se não sabe,
+// tenta mesmo assim — sorteia pela chance de prática (memory/skills.js) e
+// só executa a skill de verdade se der certo; senão, é só uma tentativa
+// frustrada (soma progresso, não move o bot).
+function runGated(bot, skillName, executeFn) {
+  if (skills.knowsSkill(bot.username, skillName)) {
+    executeFn().catch((err) => console.error(`[output] falha ao executar ${skillName}:`, err.message))
+    return
+  }
+
+  const succeeded = skills.attemptWithoutKnowledge(bot.username, skillName)
+
+  if (!succeeded) {
+    bot.chat(`Ainda não sei fazer isso direito (${skillName}), mas vou continuar tentando.`)
+    return
+  }
+
+  bot.chat(`Acho que consegui, na base da tentativa (${skillName})!`)
+  executeFn().catch((err) => console.error(`[output] falha ao executar ${skillName}:`, err.message))
+}
 
 function dispatchIntent(bot) {
   const intent = blackboard.get('current_intent')
@@ -44,19 +71,24 @@ function dispatchIntent(bot) {
       if (intent.target) follow(bot, intent.target)
       break
     case 'mine':
-      if (intent.target) mine(bot, intent.target).catch((err) => console.error('[output] falha ao minerar:', err.message))
+      if (intent.target) runGated(bot, 'mine', () => mine(bot, intent.target))
       break
     case 'craft':
-      if (intent.target) craftItem(bot, intent.target).catch((err) => console.error('[output] falha ao craftar:', err.message))
+      if (intent.target) runGated(bot, 'craft', () => craftItem(bot, intent.target))
       break
     case 'place':
-      if (intent.target) placeBlock(bot, intent.target).catch((err) => console.error('[output] falha ao construir:', err.message))
+      if (intent.target) runGated(bot, 'place', () => placeBlock(bot, intent.target))
       break
     case 'cook':
-      if (intent.target) cookItem(bot, intent.target).catch((err) => console.error('[output] falha ao cozinhar:', err.message))
+      if (intent.target) runGated(bot, 'cook', () => cookItem(bot, intent.target))
       break
     case 'explore':
       explore(bot)
+      break
+    case 'teach':
+      if (intent.target && intent.skill && intent.price != null) {
+        teach(bot, intent.skill, intent.price, intent.target)
+      }
       break
     case 'idle':
     default:

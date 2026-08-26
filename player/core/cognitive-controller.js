@@ -13,6 +13,8 @@ const llmConfig = require('../config/llm_cfg.js')
 const dispatchIntent = require('./output.js')
 const longTermMemory = require('../memory/longTermMemory.js')
 const { getActiveScenario } = require('../config/scenario_cfg.js')
+const skills = require('../memory/skills.js')
+const currency = require('../memory/currency.js')
 
 // Recursos comuns que valem a pena mencionar pro Controller ter opções
 // concretas de "mine"/"craft"/"cook" em vez de chutar um nome de bloco às
@@ -84,6 +86,10 @@ async function buildContext(bot) {
     ? nearbyResources.join(', ')
     : '(nada reconhecido nas proximidades já exploradas — considere "explore")'
 
+  const knownSkills = skills.listKnownSkills(bot.username)
+  const skillsText = knownSkills.length ? knownSkills.join(', ') : '(nenhuma skill aprendida ainda)'
+  const balance = currency.getBalance(bot.username)
+
   return `Estado atual:
 - Vida: ${health ?? '?'}/20
 - Fome: ${hunger ?? '?'}/20
@@ -92,6 +98,8 @@ async function buildContext(bot) {
 - Ameaça hostil por perto: ${threatNearby ? 'sim' : 'não'}
 - Inventário: ${inventorySummary}
 - Recursos reconhecidos nas proximidades: ${resourcesText}
+- Skills conhecidas: ${skillsText}
+- Moeda: ${balance}
 
 Eventos recentes:
 ${recentEvents}

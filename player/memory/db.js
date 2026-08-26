@@ -40,6 +40,15 @@ function getDb(agentName) {
       updated_at INTEGER NOT NULL
     )
   `)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skills (
+      skill TEXT PRIMARY KEY,
+      known INTEGER NOT NULL DEFAULT 0,
+      practice_attempts INTEGER NOT NULL DEFAULT 0,
+      acquired_via TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `)
 
   openDatabases.set(key, db)
   return db

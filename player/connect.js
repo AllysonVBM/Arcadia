@@ -17,6 +17,12 @@ const { startConsolidation } = require('./memory/consolidate.js')
 const { startProfessionReflection } = require('./core/profession-reflection.js')
 const { getActiveScenario, getAgentEntry } = require('./config/scenario_cfg.js')
 const goTo = require('./skills/goTo.js')
+const skills = require('./memory/skills.js')
+const currency = require('./memory/currency.js')
+
+const TEACH_OFFER_RE = /^!teach (\S+) (\d+) (\S+)$/
+const TEACH_ACCEPT_RE = /^!teach-accept (\S+) (\d+) (\S+)$/
+const TEACH_PROXIMITY_BLOCKS = 16
 
 const scenario = getActiveScenario()
 const scenarioAgent = getAgentEntry(scenario, agentConfig.name)
@@ -52,6 +58,12 @@ bot.on('path_reset', (reason) => {
   console.log(`[pathfinder] caminho resetado: ${reason}`)
 })
 
+
+function isNearby(bot, username, maxDistance) {
+  const target = bot.players[username]
+  if (!target || !target.entity) return false
+  return bot.entity.position.distanceTo(target.entity.position) <= maxDistance
+}
 
 function lookAtNearestPlayer() {
   // mineflayer-pathfinder já chama bot.lookAt() todo tick pra orientar o
@@ -102,6 +114,49 @@ bot.on('chat', (username, message) => {
     bot.chat('Inventário: ' + inventory.map(item => item.displayName).join(' | '))
   }
 
+  if (message === '!skills') {
+    const known = skills.listKnownSkills(bot.username)
+    bot.chat('Skills: ' + (known.length ? known.join(', ') : 'nenhuma ainda'))
+  }
+
+  if (message === '!currency') {
+    bot.chat('Moeda: ' + currency.getBalance(bot.username))
+  }
+
+  // Protocolo de ensino entre agentes — não existe canal fora do chat, então
+  // a "transação" inteira acontece por mensagens num formato fixo, nunca
+  // interpretadas por LLM. Só processa oferta/aceite dirigidos a mim, e só
+  // de quem está fisicamente perto (é isso que garante que precisa "se
+  // encontrar" pra negociar, e não só estar em algum lugar do servidor).
+  const offerMatch = message.match(TEACH_OFFER_RE)
+  if (offerMatch) {
+    const [, skillName, priceStr, toUsername] = offerMatch
+    const price = Number(priceStr)
+
+    if (toUsername === bot.username && isNearby(bot, username, TEACH_PROXIMITY_BLOCKS)) {
+      if (skills.knowsSkill(bot.username, skillName)) {
+        bot.chat(`Obrigado, mas já sei ${skillName}.`)
+      } else if (currency.debit(bot.username, price)) {
+        skills.learnSkill(bot.username, skillName, 'taught')
+        bot.chat(`!teach-accept ${skillName} ${price} ${username}`)
+        bot.chat(`Aprendi ${skillName} com ${username}!`)
+      } else {
+        bot.chat(`Gostaria de aprender ${skillName}, mas não tenho ${price} de moeda.`)
+      }
+    }
+  }
+
+  const acceptMatch = message.match(TEACH_ACCEPT_RE)
+  if (acceptMatch) {
+    const [, skillName, priceStr, fromTeacherUsername] = acceptMatch
+    const price = Number(priceStr)
+
+    if (fromTeacherUsername === bot.username) {
+      currency.credit(bot.username, price)
+      bot.chat(`Recebi ${price} por ensinar ${skillName}.`)
+    }
+  }
+
   if (message === '!life') {
     bot.chat('Vida: ' + parseInt(bot.health))
   }
@@ -125,6 +180,14 @@ let stopProfessionReflection = null
 let dashboard = null
 
 bot.once('spawn', () => {
+  // Kit inicial de skills sorteado só na primeira vez (não repete em
+  // restarts seguintes) + saldo inicial de moeda.
+  const starter = skills.assignStarterSkills(agentConfig.name)
+  currency.ensureInitialized(agentConfig.name)
+  if (starter) {
+    console.log(`[skills] kit inicial sorteado para ${agentConfig.name}: ${starter.join(', ')}`)
+  }
+
   stopCognitiveController = startCognitiveController(bot)
   stopConsolidation = startConsolidation(bot.username)
   stopProfessionReflection = startProfessionReflection(bot.username)
