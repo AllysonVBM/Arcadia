@@ -1,0 +1,27 @@
+{
+  "name": "arcadia",
+  "version": "1.0.0",
+  "description": "Agentes de IA no Minecraft - Seguindo a arquiteturo usada pela ALTERA",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AllysonVBM/Arcadia.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AllysonVBM/Arcadia/issues"
+  },
+  "homepage": "https://github.com/AllysonVBM/Arcadia#readme",
+  "dependencies": {
+    "minecraft-protocol": "^1.66.2",
+    "mineflayer": "^4.37.1",
+    "mineflayer-pathfinder": "^2.4.5",
+    "ws": "^8.21.3"
+  }
+}
