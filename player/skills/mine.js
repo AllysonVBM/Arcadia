@@ -1,13 +1,26 @@
 // Skill: minerar/coletar um bloco de um tipo específico (madeira, pedra,
 // minério...). Acha o bloco mais próximo desse tipo dentro do alcance já
-// explorado, vai até ele e quebra. É a mesma mecânica pra "gather" de
-// recurso em geral — minerar madeira ou pedra não é diferente disso.
+// explorado, vai até ele e quebra.
+//
+// Mecânica real do Minecraft que isso respeita: pedra e minério exigem uma
+// picareta pra soltar item — quebrar com a mão só remove o bloco, sem
+// drop nenhum. Madeira não exige ferramenta. Sem isso, o agente "minerava"
+// pedra pra sempre sem nunca ganhar nada, achando que tinha dado certo.
 
 const mcDataLoader = require('minecraft-data')
 const { Movements, goals } = require('mineflayer-pathfinder')
 const blackboard = require('../state/blackboard.js')
 
 const SEARCH_RADIUS = 32
+
+function findSuitableTool(bot, blockType) {
+  if (!blockType.harvestTools) return { needed: false, tool: null }
+
+  const toolIds = Object.keys(blockType.harvestTools).map(Number)
+  const tool = bot.inventory.items().find((item) => toolIds.includes(item.type))
+
+  return { needed: true, tool: tool || null }
+}
 
 async function mine(bot, blockName) {
   const mcData = mcDataLoader(bot.version)
@@ -24,6 +37,13 @@ async function mine(bot, blockName) {
     return false
   }
 
+  const { needed, tool } = findSuitableTool(bot, blockType)
+
+  if (needed && !tool) {
+    bot.chat(`Preciso de uma ferramenta melhor pra minerar ${blockName} de verdade — ainda não tenho uma.`)
+    return false
+  }
+
   const block = bot.findBlock({ matching: blockType.id, maxDistance: SEARCH_RADIUS })
 
   if (!block) {
@@ -34,6 +54,8 @@ async function mine(bot, blockName) {
   const movements = new Movements(bot, mcData)
   bot.pathfinder.setMovements(movements)
   await bot.pathfinder.goto(new goals.GoalLookAtBlock(block.position, bot.world))
+
+  if (tool) await bot.equip(tool, 'hand')
 
   await bot.dig(block)
   bot.chat(`Minerei ${blockName}.`)

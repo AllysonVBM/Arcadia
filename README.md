@@ -94,7 +94,7 @@ player/
 │   ├── eat.js                    # come o primeiro item comestível do inventário
 │   ├── follow.js                 # segue um jogador continuamente
 │   ├── goTo.js                   # vai até uma coordenada (usada pela área de spawn do cenário)
-│   ├── mine.js                   # acha e quebra um bloco de um tipo específico
+│   ├── mine.js                   # acha e quebra um bloco; equipa a ferramenta certa quando ela é exigida
 │   ├── craftItem.js              # crafta um item; faz e coloca mesa sozinho se souber "place"
 │   ├── placeBlock.js             # constrói: coloca um bloco do inventário
 │   ├── cookItem.js               # cozinha num forno (exige combustível + item cru)
@@ -231,6 +231,8 @@ Cada decisão do Controller já recebe uma lista de **recursos reconhecidos nas 
 ### Skills aprendidas, moeda e ensino entre agentes
 
 `mine`, `craft`, `place`, `cook`, `hunt`, `fight`, `bow`, `plant` e `swim` são **"gated"** — não é porque a skill existe no código que qualquer agente já sabe usá-la. Sobrevivência (`flee`, `eat`, `follow`, `explore`, `idle`, `speak`) nunca é gated, por design: não pode depender de aprendizado.
+
+**A ordem natural de progressão importa de verdade, porque é a mecânica real do Minecraft.** Pedra e minério só soltam item se houver uma picareta equipada — minerar com a mão só quebra o bloco, sem drop. Madeira não exige nenhuma ferramenta. `mine.js` já verifica isso (recusa minerar pedra/minério sem ferramenta, em vez de fingir sucesso) e o contrato de resposta explica essa ordem pro Controller — mas ainda depende da LLM escolher seguir essa lógica; não há um planejador forçando "madeira antes de pedra".
 
 - **Kit inicial aleatório**: na primeira vez que um agente sobe (nunca de novo depois disso), sorteia 2 das skills gated como já conhecidas. As outras precisam ser aprendidas.
 - **Aprender praticando**: se o Controller decide uma ação que o agente ainda não sabe, ele tenta mesmo assim — cada tentativa tem uma chance de dar certo que cresce com o número de tentativas (`memory/skills.js`), até destravar de vez na 8ª. Sem saber, uma tentativa malsucedida não executa a ação de verdade, só soma progresso.

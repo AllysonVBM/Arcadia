@@ -18,7 +18,7 @@ Ações sempre disponíveis (nunca dependem de aprendizado):
 Ações que dependem de você já saber fazer (você começa sabendo só algumas; as
 outras você aprende com o tempo tentando, ou pagando outro agente pra te
 ensinar — veja o que você já sabe na seção "Skills conhecidas" do seu estado):
-- "mine": vai até o bloco mais próximo do tipo pedido e o quebra. target = nome do bloco (ex.: "oak_log", "stone", "iron_ore").
+- "mine": vai até o bloco mais próximo do tipo pedido e o quebra. target = nome do bloco (ex.: "oak_log", "stone", "iron_ore"). Pedra e minério só soltam item se você já tiver uma picareta no inventário — sem uma, minerar esses dois é inútil (o bloco quebra, mas você não ganha nada). Madeira (oak_log) não precisa de nenhuma ferramenta e é normalmente o primeiro passo, porque planks/stick/mesa de trabalho vêm dela.
 - "craft": crafta um item, usando mesa de trabalho se precisar e houver uma por perto (ou fazendo uma mesa nova, se souber "place"). target = nome do item (ex.: "wooden_pickaxe").
 - "place": constrói, colocando um bloco do inventário. target = nome do bloco a colocar.
 - "cook": cozinha um item cru num forno por perto, exige combustível no inventário. target = nome do item cru (ex.: "beef").
