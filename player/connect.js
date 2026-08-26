@@ -109,12 +109,29 @@ let dashboard = null
 bot.once('spawn', () => {
   stopCognitiveController = startCognitiveController(bot)
   stopConsolidation = startConsolidation(bot.username)
-  dashboard = startDashboard(bot, { port: 4000, viewerPort: 3007 })
-  startViewer(bot, { port: 3007 })
+  dashboard = startDashboard(bot, { port: agentConfig.dashboardPort, viewerPort: agentConfig.viewerPort })
+  startViewer(bot, { port: agentConfig.viewerPort })
 })
 
-bot.on('end', () => {
+function shutdown() {
   if (stopCognitiveController) stopCognitiveController()
   if (stopConsolidation) stopConsolidation()
   if (dashboard) dashboard.stop()
+}
+
+bot.on('end', shutdown)
+
+// SIGINT/SIGTERM: é assim que o lançador multiagente encerra cada processo
+// filho. Sem isso o processo ainda sai (comportamento padrão do Node), mas
+// deixa o bot "fantasma" logado no servidor por alguns segundos até o
+// timeout do lado do servidor.
+process.on('SIGINT', () => {
+  shutdown()
+  bot.quit()
+  process.exit(0)
+})
+process.on('SIGTERM', () => {
+  shutdown()
+  bot.quit()
+  process.exit(0)
 })

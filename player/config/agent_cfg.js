@@ -1,16 +1,16 @@
-// Qual identidade este processo está rodando — selecionável por env var.
-// É o mesmo mecanismo que o lançador multiagente vai usar mais pra frente
-// pra subir N processos, cada um com uma identidade diferente; hoje, com um
-// processo só, ele só decide qual persona carregar e qual username usar.
+// Qual identidade este processo está rodando — selecionável por env var. É
+// o mecanismo que o lançador multiagente usa pra dar uma identidade a cada
+// processo que sobe (player/launcher.js).
 
-const availableIdentities = require('./player_cfg.js')
+const roster = require('./player_cfg.js')
 
-const name = process.env.AGENT_NAME || availableIdentities[0]
+const name = process.env.AGENT_NAME || roster[0].name
+const identity = roster.find((entry) => entry.name === name)
 
-if (!availableIdentities.includes(name)) {
+if (!identity) {
   throw new Error(
-    `Identidade "${name}" não está em player_cfg.js (disponíveis: ${availableIdentities.join(', ')})`
+    `Identidade "${name}" não está em player_cfg.js (disponíveis: ${roster.map((e) => e.name).join(', ')})`
   )
 }
 
-module.exports = { name }
+module.exports = identity // { name, dashboardPort, viewerPort }

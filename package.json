@@ -5,6 +5,7 @@
   "main": "player/connect.js",
   "scripts": {
     "start": "node player/connect.js",
+    "swarm": "node player/launcher.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

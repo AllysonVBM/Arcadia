@@ -58,9 +58,10 @@ Dois loops rodam em paralelo, em velocidades diferentes — o princípio de **co
 ```
 player/
 ├── connect.js                    # bootstrap: cria o bot e liga todos os módulos
+├── launcher.js                   # sobe N processos independentes (um por identidade)
 ├── server_cfg.js                 # host/porta/versão do servidor Minecraft
 ├── config/
-│   ├── player_cfg.js             # identidades disponíveis (roster)
+│   ├── player_cfg.js             # roster: identidade + porta de dashboard/viewer
 │   ├── agent_cfg.js              # qual identidade este processo roda (env AGENT_NAME)
 │   └── llm_cfg.js                # host/modelo/temperatura do Ollama
 ├── identity/
@@ -144,7 +145,21 @@ Cada identidade tem sua própria personalidade (`identity/personas/<nome>.js`) e
 AGENT_NAME=Atena npm start
 ```
 
-Pra adicionar uma identidade nova: criar `identity/personas/<nome>.js` (copiando o formato de `pepper.js`), registrar em `identity/index.js`, e incluir o nome em `config/player_cfg.js`. `agent_cfg.js` recusa subir (erro explícito) se `AGENT_NAME` não estiver no roster.
+Pra adicionar uma identidade nova: criar `identity/personas/<nome>.js` (copiando o formato de `pepper.js`), registrar em `identity/index.js`, e incluir uma entrada em `config/player_cfg.js` com nome + porta de dashboard + porta de viewer (precisam ser únicas por identidade). `agent_cfg.js` recusa subir (erro explícito) se `AGENT_NAME` não estiver no roster.
+
+### Rodando múltiplos agentes ao mesmo tempo
+
+```bash
+npm run swarm                  # todo mundo do roster
+npm run swarm -- Pepper        # só o caso isolado
+npm run swarm -- Pepper Atena  # a dupla
+```
+
+O `launcher.js` sobe um processo Node **de verdade** por identidade (`child_process.fork`, não threads) — cada um com seu próprio module registry, seu próprio Agent State, sua própria LTM. Isolamento por construção, não por convenção: o lançador só passa `AGENT_NAME` pra cada filho, nunca informação sobre os outros agentes. Um agente só fica sabendo que o outro existe se de fato se encontrarem no jogo (chat ouvido, entidade vista) — nada nisso passa pelo lançador.
+
+Cada agente sobe seu próprio dashboard/viewer na porta definida em `player_cfg.js` — hoje é preciso abrir uma aba por agente (`localhost:4000`, `localhost:4001`, ...); um painel único agregando todos é um passo natural mais pra frente, ainda não construído.
+
+`Ctrl+C` no lançador manda `SIGINT` pra cada filho, que se desconecta do servidor antes de sair — sem isso o bot fica "fantasma" logado por alguns segundos.
 
 ### Comandos de chat (debug manual)
 
@@ -165,7 +180,7 @@ Assim que o agente nasce no mundo, dois servidores locais sobem junto com ele �
 - **`http://localhost:4000`** — o painel: vida/fome com barra, posição, ameaça por perto, a decisão atual do Cognitive Controller (`current_intent` + `reason`), a última skill executada, inventário, chat do Minecraft em tempo real e a memória de trabalho recente. Tudo via WebSocket, atualizado a cada segundo (chat é instantâneo).
 - **`http://localhost:3007`** — visão 3D do que o agente está vendo ([prismarine-viewer](https://github.com/PrismarineJS/prismarine-viewer)), embutida no próprio painel: informe a porta (já vem pré-preenchida) e clique em Conectar.
 
-Hoje o painel mostra um agente porque só existe um agente rodando; ele já foi escrito pra renderizar quantos agentes reportarem a ele (chave por nome) — a extensão pra múltiplos processos é a Etapa do lançador multiagente, ainda não implementada (ver Roteiro).
+Com múltiplos agentes rodando via `npm run swarm`, cada um sobe seu próprio dashboard na porta configurada em `player_cfg.js` — o frontend já foi escrito pra renderizar quantos agentes reportarem a ele (chave por nome), mas hoje isso significa abrir uma aba por porta; um relay agregando tudo numa página só ainda não existe.
 
 ### Memória de longo prazo (LTM)
 
@@ -181,7 +196,10 @@ Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorad
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
 - **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.
 - **Sem índice vetorial.** `recall()` calcula similaridade de cosseno contra *todas* as memórias do agente a cada chamada — funciona bem até a casa de milhares de entradas; se um agente viver muito tempo isso pode precisar de um índice de verdade (sqlite-vec ou similar) mais pra frente.
-- **Um agente só, por design.** Social Awareness e Goal Generation (PIANO) dependem de 2+ agentes no mesmo mundo; `player_cfg.js` já lista uma segunda identidade (`Atena`). O isolamento de LTM já foi construído pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
+- **Só 2 identidades no roster.** `Pepper` e `Atena` — o caso de teste com 5 agentes precisa de mais 3 personas novas antes de rodar (`identity/personas/*.js` + entrada em `player_cfg.js`); o mecanismo do lançador já suporta qualquer N.
+- **Sem trava de sobrevivência contra o Controller.** O reflexo nunca espera o Controller, mas nada impede hoje o Controller despachar um `follow`/`idle` bem no meio de um `flee` em andamento e os dois disputarem o `pathfinder.setGoal` — fica pra Fase de cenários com objetivos.
+- **Dashboard sem agregação entre processos.** Com `npm run swarm`, cada agente sobe seu próprio painel numa porta separada — hoje é preciso uma aba por agente, não existe visão única.
+- **Social Awareness e Goal Generation** (PIANO) dependem de 2+ agentes no mesmo mundo interagindo de fato — ainda não implementados. O isolamento de LTM e o lançador multiagente já foram construídos pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
 - **Servidores com mods**: o mineflayer enxerga o mundo pelo protocolo vanilla via [`minecraft-data`](https://github.com/PrismarineJS/minecraft-data) — blocos/entidades customizados por mods que não estão nesse registro podem confundir o pathfinder (custo de movimento incorreto, dificuldade pra pular certos blocos).
 
 ## Roteiro
@@ -195,7 +213,7 @@ O projeto segue um roteiro em fases, cada uma só começando quando a anterior s
 4. **Painel de observação** — dashboard web + visão 3D em tempo real ✅
 5. **LTM isolada por agente** — memória de longo prazo persistida, sem conhecimento cross-agente a priori ✅
 6. **Personas por agente** — uma identidade/personalidade própria por processo ✅
-7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo *(pendente)*
+7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo ✅
 8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo *(pendente)*
 9. **Profissão emergente** — reflexão de baixa frequência sobre a LTM do próprio agente, decidindo/reafirmando uma profissão *(pendente)*
 
