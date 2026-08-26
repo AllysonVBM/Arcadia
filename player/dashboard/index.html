@@ -146,6 +146,15 @@
   }
   .empty { color: var(--ink-soft); font-size: 0.82rem; font-style: italic; }
 
+  .skills-list { display: flex; flex-direction: column; gap: 0.35rem; }
+  .skill-row { display: grid; grid-template-columns: 5rem 1fr 2.5rem; align-items: center; gap: 0.6rem; }
+  .skill-name { font-family: var(--mono); font-size: 0.78rem; }
+  .skill-name.known { color: var(--ok); font-weight: 600; }
+  .skill-bar-track { background: var(--surface-2); border-radius: 4px; height: 6px; overflow: hidden; }
+  .skill-bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.3s; }
+  .skill-bar-fill.done { background: var(--ok); }
+  .skill-meta { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-soft); text-align: right; }
+
   #chat {
     display: flex;
     flex-direction: column;
@@ -288,6 +297,19 @@
         ? escapeHtml(data.profession)
         : 'profissão ainda não definida'
 
+      const PRACTICE_UNLOCK_ATTEMPTS = 8
+      const skillsHtml = (data.skillsProgress || []).map((s) => {
+        const pct = s.known ? 100 : Math.min(100, (s.attempts / PRACTICE_UNLOCK_ATTEMPTS) * 100)
+        const meta = s.known ? (s.acquiredVia || 'sabe') : (s.attempts > 0 ? `${s.attempts}/${PRACTICE_UNLOCK_ATTEMPTS} tentativas` : 'nunca tentou')
+        return `
+          <div class="skill-row">
+            <span class="skill-name ${s.known ? 'known' : ''}">${escapeHtml(s.skill)}</span>
+            <div class="skill-bar-track"><div class="skill-bar-fill ${s.known ? 'done' : ''}" style="width:${pct}%"></div></div>
+            <span class="skill-meta">${escapeHtml(meta)}</span>
+          </div>
+        `
+      }).join('')
+
       el.innerHTML = `
         <div class="agent-name">${escapeHtml(name)} ${badges.join(' ')}</div>
         <div class="stat-label" style="margin-bottom:0.7rem">${professionText}</div>
@@ -314,6 +336,8 @@
         ${intent}
         <div class="stat-label" style="margin:0.7rem 0 0.4rem">Inventário</div>
         ${inv}
+        <div class="stat-label" style="margin:0.7rem 0 0.4rem">Skills (${(data.skillsProgress || []).filter((s) => s.known).length}/${(data.skillsProgress || []).length} conhecidas) · moeda: ${fmt(data.currency)} · ${fmt(data.ltmCount)} memórias de longo prazo</div>
+        <div class="skills-list">${skillsHtml}</div>
       `
       agentsEl.appendChild(el)
     }

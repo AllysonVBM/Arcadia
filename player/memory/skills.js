@@ -71,6 +71,25 @@ function listKnownSkills(agentName) {
     .map((row) => row.skill)
 }
 
+// Estado de TODAS as skills gated (conhecidas ou não), pra observabilidade
+// (dashboard) — não usa ensureRow, então só olhar o progresso não cria
+// linhas novas no banco pra skills nunca tentadas.
+function getSkillsProgress(agentName) {
+  const db = getDb(agentName)
+  const rows = db.prepare('SELECT skill, known, practice_attempts, acquired_via FROM skills').all()
+  const byName = new Map(rows.map((row) => [row.skill, row]))
+
+  return GATED_SKILLS.map((skill) => {
+    const row = byName.get(skill)
+    return {
+      skill,
+      known: !!(row && row.known),
+      attempts: row ? row.practice_attempts : 0,
+      acquiredVia: row ? row.acquired_via : null,
+    }
+  })
+}
+
 // Sorteia um kit inicial de skills já conhecidas na primeira vez que o
 // agente sobe — nunca de novo depois disso (flag em profile, independente
 // da tabela skills, pra não confundir "nunca inicializado" com "sorteado
@@ -94,5 +113,6 @@ module.exports = {
   learnSkill,
   attemptWithoutKnowledge,
   listKnownSkills,
+  getSkillsProgress,
   assignStarterSkills,
 }

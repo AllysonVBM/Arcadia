@@ -13,6 +13,9 @@ const { WebSocketServer } = require('ws')
 const blackboard = require('../state/blackboard.js')
 const status = require('../state/validators/status.js')
 const { hasHostileNearby } = require('../state/validators/threat.js')
+const skills = require('../memory/skills.js')
+const currency = require('../memory/currency.js')
+const longTermMemory = require('../memory/longTermMemory.js')
 
 const INDEX_PATH = path.join(__dirname, 'index.html')
 
@@ -33,6 +36,9 @@ function buildSnapshot(bot) {
       currentIntent: blackboard.get('current_intent') ?? null,
       lastAction: blackboard.get('last_action') ?? null,
       workingMemory: blackboard.get('memory.working') || [],
+      skillsProgress: skills.getSkillsProgress(bot.username),
+      currency: currency.getBalance(bot.username),
+      ltmCount: longTermMemory.count(bot.username),
     },
   }
 }

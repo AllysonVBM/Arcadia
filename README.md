@@ -263,7 +263,7 @@ Esses comandos são atalhos diretos pra debug — não passam pelo Cognitive Con
 
 Assim que o agente nasce no mundo, dois servidores locais sobem junto com ele — nenhum dos dois precisa ser iniciado à parte:
 
-- **`http://localhost:4000`** — o painel: vida/fome com barra, posição, ameaça por perto, a decisão atual do Cognitive Controller (`current_intent` + `reason`), a última skill executada, inventário, chat do Minecraft em tempo real e a memória de trabalho recente. Tudo via WebSocket, atualizado a cada segundo (chat é instantâneo).
+- **`http://localhost:4000`** — o painel: vida/fome com barra, posição, ameaça por perto, a decisão atual do Cognitive Controller (`current_intent` + `reason`), a última skill executada, inventário, chat do Minecraft em tempo real, memória de trabalho recente, e uma barra por skill gated mostrando se já sabe, quantas tentativas de prática já fez (de 8), moeda e quantas memórias de longo prazo já acumulou — é o jeito mais rápido de checar se um agente está progredindo de verdade ou só girando em roda. Tudo via WebSocket, atualizado a cada segundo (chat é instantâneo).
 - **`http://localhost:3007`** — visão 3D do que o agente está vendo ([prismarine-viewer](https://github.com/PrismarineJS/prismarine-viewer)), embutida no próprio painel: informe a porta (já vem pré-preenchida) e clique em Conectar.
 
 Com múltiplos agentes rodando via `npm run swarm`, cada um sobe seu próprio dashboard na porta configurada em `player_cfg.js` — o frontend já foi escrito pra renderizar quantos agentes reportarem a ele (chave por nome), mas hoje isso significa abrir uma aba por porta; um relay agregando tudo numa página só ainda não existe.
@@ -275,6 +275,8 @@ Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorad
 - **Escrita**: a cada ~2min, `consolidate.js` manda os eventos recentes (working memory) pra LLM e pede pra decidir o que vale virar memória de longo prazo, com uma nota de importância de 1 a 10. A maioria dos ciclos não gera memória nenhuma — isso é esperado.
 - **Leitura**: `longTermMemory.recall(agente, consulta)` pontua cada memória por **recência + relevância + importância** (mesma fórmula de Park et al., *Generative Agents*, 2023) e devolve as mais relevantes. O Cognitive Controller já usa isso automaticamente a cada decisão.
 - **Relevância** é calculada por similaridade de cosseno entre embeddings (`nomic-embed-text` via Ollama) — sem extensão de banco vetorial; na escala de memória de um agente isso é rápido o suficiente calculado em JS puro.
+
+**Se `ollama pull nomic-embed-text` nunca foi rodado**, toda escrita e leitura de LTM falha silenciosamente (o erro é só logado no console, pra não travar o agente) — o contador de memórias no painel fica em 0 pra sempre, mesmo depois de horas rodando. Vale checar `ollama list` de vez em quando pra confirmar que o modelo de embeddings está mesmo instalado, não só o de chat.
 
 ### Profissão emergente
 
