@@ -2,6 +2,7 @@ const mineflayer = require('mineflayer')
 const pathfinder = require('mineflayer-pathfinder').pathfinder
 
 const serverConfig = require('./server_cfg.js')
+const agentConfig = require('./config/agent_cfg.js')
 const blackboard = require('./state/blackboard.js')
 const agentHealth = require('./perception/agentHealth.js')
 const agentPosition = require('./perception/agentPosition.js')
@@ -16,7 +17,7 @@ const { startConsolidation } = require('./memory/consolidate.js')
 
 const bot = mineflayer.createBot({
   host: serverConfig.host,
-  username: 'Pepper',
+  username: agentConfig.name,
   port: serverConfig.port,
   version: serverConfig.version,
 })

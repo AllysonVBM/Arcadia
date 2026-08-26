@@ -60,10 +60,15 @@ player/
 ├── connect.js                    # bootstrap: cria o bot e liga todos os módulos
 ├── server_cfg.js                 # host/porta/versão do servidor Minecraft
 ├── config/
-│   ├── player_cfg.js             # identidades disponíveis para o agente
+│   ├── player_cfg.js             # identidades disponíveis (roster)
+│   ├── agent_cfg.js              # qual identidade este processo roda (env AGENT_NAME)
 │   └── llm_cfg.js                # host/modelo/temperatura do Ollama
 ├── identity/
-│   └── persona.js                # prompt de sistema — personalidade do agente
+│   ├── index.js                  # carrega a persona certa pra identidade configurada
+│   ├── responseContract.js       # formato JSON de resposta, igual pra qualquer persona
+│   └── personas/
+│       ├── pepper.js             # curiosa, direta, fala pouco
+│       └── atena.js              # cautelosa, sociável, prioriza avisar os outros
 ├── state/
 │   ├── blackboard.js             # Agent State: Map com get/set/has/delete
 │   └── validators/
@@ -117,7 +122,7 @@ npm install
 
 ### Configuração
 
-Edite [`player/server_cfg.js`](player/server_cfg.js) com o host/porta/versão do seu servidor. Opcionalmente, copie `.env.example` para `.env` para trocar o modelo ou o endpoint do Ollama:
+Edite [`player/server_cfg.js`](player/server_cfg.js) com o host/porta/versão do seu servidor. Opcionalmente, copie `.env.example` para `.env` para trocar o modelo, o endpoint do Ollama ou a identidade:
 
 ```bash
 cp .env.example .env
@@ -129,7 +134,17 @@ cp .env.example .env
 npm start
 ```
 
-O agente entra no mundo com o nome `Pepper`, começa a reagir sozinho a vida/fome crítica (reflexo) e, ~15s depois de nascer, começa a tomar decisões de alto nível via LLM (Cognitive Controller).
+Sem nada configurado, o agente sobe como `Pepper` — a primeira identidade de [`player_cfg.js`](player/config/player_cfg.js). Ele começa a reagir sozinho a vida/fome crítica (reflexo) e, ~15s depois de nascer, começa a tomar decisões de alto nível via LLM (Cognitive Controller), com a personalidade definida em [`identity/personas/pepper.js`](player/identity/personas/pepper.js).
+
+### Trocando de identidade
+
+Cada identidade tem sua própria personalidade (`identity/personas/<nome>.js`) e sua própria LTM (`data/<nome>/memory.sqlite`) — processos diferentes, memórias diferentes, sem nada compartilhado:
+
+```bash
+AGENT_NAME=Atena npm start
+```
+
+Pra adicionar uma identidade nova: criar `identity/personas/<nome>.js` (copiando o formato de `pepper.js`), registrar em `identity/index.js`, e incluir o nome em `config/player_cfg.js`. `agent_cfg.js` recusa subir (erro explícito) se `AGENT_NAME` não estiver no roster.
 
 ### Comandos de chat (debug manual)
 
@@ -179,7 +194,7 @@ O projeto segue um roteiro em fases, cada uma só começando quando a anterior s
 3. **Cognitive Controller** — LLM local (Ollama) decidindo a ação de alto nível ✅
 4. **Painel de observação** — dashboard web + visão 3D em tempo real ✅
 5. **LTM isolada por agente** — memória de longo prazo persistida, sem conhecimento cross-agente a priori ✅
-6. **Personas por agente** — uma identidade/personalidade própria por processo *(pendente)*
+6. **Personas por agente** — uma identidade/personalidade própria por processo ✅
 7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo *(pendente)*
 8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo *(pendente)*
 9. **Profissão emergente** — reflexão de baixa frequência sobre a LTM do próprio agente, decidindo/reafirmando uma profissão *(pendente)*

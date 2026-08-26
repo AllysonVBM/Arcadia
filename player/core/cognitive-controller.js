@@ -7,7 +7,7 @@
 const blackboard = require('../state/blackboard.js')
 const { hasHostileNearby } = require('../state/validators/threat.js')
 const ollama = require('../llm/ollamaClient.js')
-const persona = require('../identity/persona.js')
+const persona = require('../identity/index.js')
 const llmConfig = require('../config/llm_cfg.js')
 const dispatchIntent = require('./output.js')
 const longTermMemory = require('../memory/longTermMemory.js')
