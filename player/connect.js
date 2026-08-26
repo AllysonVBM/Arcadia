@@ -54,6 +54,13 @@ bot.on('path_reset', (reason) => {
 
 
 function lookAtNearestPlayer() {
+  // mineflayer-pathfinder já chama bot.lookAt() todo tick pra orientar o
+  // movimento (ouvindo physicsTick); isso aqui ouve physicTick, o alias
+  // depreciado que dispara logo depois, no mesmo tick — sem essa guarda,
+  // os dois brigavam pela direção do olhar sempre que havia um goal ativo
+  // e outro jogador/agente por perto, travando o movimento no lugar.
+  if (bot.pathfinder && bot.pathfinder.isMoving()) return
+
   const playerFilter = (entity) => entity.type === 'player' && entity.username !== bot.username
   const playerEntity = bot.nearestEntity(playerFilter)
 
