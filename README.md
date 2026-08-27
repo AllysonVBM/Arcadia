@@ -169,6 +169,8 @@ npm start
 
 Sem nada configurado, o agente sobe como `Pepper` — a primeira identidade de [`player_cfg.js`](player/config/player_cfg.js). Ele começa a reagir sozinho a vida/fome crítica (reflexo) e, ~15s depois de nascer, começa a tomar decisões de alto nível via LLM (Cognitive Controller), com a personalidade definida em [`identity/personas/pepper.js`](player/identity/personas/pepper.js).
 
+Uma desconexão (erro de rede, kick, servidor reiniciando) não mata o processo — `connect.js` tenta de novo sozinho, com backoff crescente (5s, 10s, 20s... até um teto de 60s, resetando pro valor base assim que reconecta de verdade). `!teach`, `kicked` e erros de conexão ficam logados com o motivo, em vez de o agente simplesmente sumir do swarm sem explicação. `Ctrl+C`/`SIGTERM` continuam encerrando de vez (nunca tentam reconectar), e agora esperam a desconexão real terminar antes de matar o processo — sair rápido demais é o tipo de coisa que deixa uma sessão "fantasma" no servidor, causando kick por login duplicado na próxima conexão.
+
 ### Trocando de identidade
 
 Cada identidade tem sua própria personalidade (`identity/personas/<nome>.js`) e sua própria LTM (`data/<nome>/memory.sqlite`) — processos diferentes, memórias diferentes, sem nada compartilhado:
@@ -306,6 +308,7 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 
 ## Limitações conhecidas (honestidade de pesquisa)
 
+- **Log ainda é só `console.log`/`console.error`, sem estrutura.** Dá pra reconstruir o que aconteceu lendo o terminal (inclusive motivo de kick/erro de conexão agora), mas não é log estruturado de verdade (JSON lines, níveis, arquivo persistido) — se o terminal fechar, o histórico de eventos dessa sessão some.
 - **`swim` não muda a política geral de movimento.** É uma ação explícita (vai até a água e atravessa) — as outras skills continuam evitando água pelo custo padrão do `Movements`, não existe ainda uma noção de "não sei nadar, então evito água em qualquer situação".
 - **`plant` não sabe preparar terra.** Só planta em farmland já existente — tilling (enxada + terra) não está implementado.
 - **`hunt`/`fight` têm uma rede de segurança de 20 ataques**, não perseguem o alvo indefinidamente se ele fugir pra longe ou se esconder.
@@ -327,7 +330,7 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 
 O projeto segue um roteiro em fases, cada uma só começando quando a anterior sustenta o agente sem cair:
 
-0. **Base de conexão estável** — reconexão automática, log estruturado *(parcial)*
+0. **Base de conexão estável** — reconexão automática ✅, log estruturado *(parcial — ver Limitações)*
 1. **Camada reflexa** — heurísticas de sobrevivência sem LLM ✅
 2. **Skill Execution formal** — biblioteca de ações com contrato de expectativa *(parcial)*
 3. **Cognitive Controller** — LLM local (Ollama) decidindo a ação de alto nível ✅
