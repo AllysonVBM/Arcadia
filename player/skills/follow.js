@@ -6,12 +6,13 @@ const mcDataLoader = require('minecraft-data')
 const { Movements } = require('mineflayer-pathfinder')
 const { GoalFollow } = require('mineflayer-pathfinder').goals
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 function follow(bot, username) {
   const target = bot.players[username]
 
   if (!target || !target.entity) {
-    bot.chat('Você está muito longe, não consigo te ver!')
+    chatThrottle.say(bot, 'Você está muito longe, não consigo te ver!')
     return false
   }
 

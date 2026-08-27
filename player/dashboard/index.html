@@ -297,6 +297,10 @@
         ? escapeHtml(data.profession)
         : 'profissão ainda não definida'
 
+      const goalText = data.currentGoal
+        ? escapeHtml(data.currentGoal.description)
+        : 'sem objetivo de curto prazo ainda'
+
       const PRACTICE_UNLOCK_ATTEMPTS = 8
       const skillsHtml = (data.skillsProgress || []).map((s) => {
         const pct = s.known ? 100 : Math.min(100, (s.attempts / PRACTICE_UNLOCK_ATTEMPTS) * 100)
@@ -312,7 +316,8 @@
 
       el.innerHTML = `
         <div class="agent-name">${escapeHtml(name)} ${badges.join(' ')}</div>
-        <div class="stat-label" style="margin-bottom:0.7rem">${professionText}</div>
+        <div class="stat-label" style="margin-bottom:0.3rem">${professionText}</div>
+        <div class="intent-box" style="margin-bottom:0.7rem"><div class="action">objetivo atual</div><div class="reason">${goalText}</div></div>
         <div class="stats">
           <div>
             <div class="stat-label">Vida</div>

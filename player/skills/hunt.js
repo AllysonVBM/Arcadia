@@ -4,6 +4,7 @@
 const { Movements, goals } = require('mineflayer-pathfinder')
 const mcDataLoader = require('minecraft-data')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const HUNT_RADIUS = 32
 const ATTACK_INTERVAL_MS = 700 // respeita o cooldown de ataque do jogo
@@ -24,7 +25,7 @@ async function hunt(bot) {
   })
 
   if (!target) {
-    bot.chat('Não achei nenhum animal por perto pra caçar.')
+    chatThrottle.say(bot, 'Não achei nenhum animal por perto pra caçar.')
     return false
   }
 
@@ -39,7 +40,7 @@ async function hunt(bot) {
     await new Promise((resolve) => setTimeout(resolve, ATTACK_INTERVAL_MS))
   }
 
-  bot.chat('Caçada terminada.')
+  chatThrottle.say(bot, 'Caçada terminada.')
   return true
 }
 

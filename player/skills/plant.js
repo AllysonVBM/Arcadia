@@ -7,6 +7,7 @@ const Vec3 = require('vec3')
 const mcDataLoader = require('minecraft-data')
 const { Movements, goals } = require('mineflayer-pathfinder')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const PLANTABLE = ['wheat_seeds', 'beetroot_seeds', 'melon_seeds', 'pumpkin_seeds', 'carrot', 'potato']
 const FARMLAND_SEARCH_RADIUS = 24
@@ -21,7 +22,7 @@ async function plant(bot) {
   })
 
   if (!seed) {
-    bot.chat('Não tenho nenhuma semente pra plantar.')
+    chatThrottle.say(bot, 'Não tenho nenhuma semente pra plantar.')
     return false
   }
 
@@ -32,7 +33,7 @@ async function plant(bot) {
     : null
 
   if (!farmland) {
-    bot.chat('Não achei terra arável por perto pra plantar.')
+    chatThrottle.say(bot, 'Não achei terra arável por perto pra plantar.')
     return false
   }
 
@@ -43,7 +44,7 @@ async function plant(bot) {
   await bot.equip(seed, 'hand')
   await bot.placeBlock(farmland, new Vec3(0, 1, 0))
 
-  bot.chat(`Plantei ${seed.name}.`)
+  chatThrottle.say(bot, `Plantei ${seed.name}.`)
   return true
 }
 

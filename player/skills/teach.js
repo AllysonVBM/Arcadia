@@ -7,13 +7,16 @@
 // nunca compartilham estado diretamente.
 
 const skills = require('../memory/skills.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 function teach(bot, skillName, price, toUsername) {
   if (!skills.knowsSkill(bot.username, skillName)) {
-    bot.chat(`Ainda não sei ${skillName} o suficiente pra ensinar.`)
+    chatThrottle.say(bot, `Ainda não sei ${skillName} o suficiente pra ensinar.`)
     return false
   }
 
+  // A oferta em si nunca é suprimida pelo throttle — é uma tentativa de
+  // transação de verdade, não um lamento repetido.
   bot.chat(`!teach ${skillName} ${price} ${toUsername}`)
   return true
 }

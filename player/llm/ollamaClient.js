@@ -4,6 +4,14 @@
 
 const llmConfig = require('../config/llm_cfg.js')
 
+// Alguns modelos (ex.: qwen3) têm "thinking mode" e podem prefixar a
+// resposta com um bloco de raciocínio antes do JSON, mesmo com think:false
+// pedido. Remove isso em vez de confiar cegamente que o modelo obedeceu —
+// quem faz o JSON.parse de verdade fica em cada módulo que chama chat().
+function stripThinkingBlock(content) {
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+}
+
 async function chat(messages) {
   const response = await fetch(`${llmConfig.host}/api/chat`, {
     method: 'POST',
@@ -13,6 +21,7 @@ async function chat(messages) {
       messages,
       stream: false,
       format: 'json',
+      think: llmConfig.think,
       options: { temperature: llmConfig.temperature },
     }),
   })
@@ -23,7 +32,7 @@ async function chat(messages) {
   }
 
   const data = await response.json()
-  return data.message.content
+  return stripThinkingBlock(data.message.content)
 }
 
 module.exports = { chat }

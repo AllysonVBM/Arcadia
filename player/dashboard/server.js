@@ -28,6 +28,7 @@ function buildSnapshot(bot) {
       health: blackboard.get('health') ?? null,
       hunger: blackboard.get('hunger') ?? null,
       profession: blackboard.get('profession') ?? null,
+      currentGoal: blackboard.get('current_goal') ?? null,
       position: blackboard.get('position') ?? null,
       inventory: blackboard.get('inventory') || [],
       threatNearby: hasHostileNearby(bot),

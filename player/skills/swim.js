@@ -6,6 +6,7 @@
 const mcDataLoader = require('minecraft-data')
 const { Movements, goals } = require('mineflayer-pathfinder')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const WATER_SEARCH_RADIUS = 32
 
@@ -21,7 +22,7 @@ async function swim(bot) {
   })
 
   if (!waterBlock) {
-    bot.chat('Não encontrei água por perto pra nadar.')
+    chatThrottle.say(bot, 'Não encontrei água por perto pra nadar.')
     return false
   }
 
@@ -29,7 +30,7 @@ async function swim(bot) {
   bot.pathfinder.setMovements(movements)
   await bot.pathfinder.goto(new goals.GoalNear(waterBlock.position.x, waterBlock.position.y, waterBlock.position.z, 1))
 
-  bot.chat('Nadei até a água.')
+  chatThrottle.say(bot, 'Nadei até a água.')
   return true
 }
 

@@ -10,6 +10,7 @@
 const mcDataLoader = require('minecraft-data')
 const { Movements, goals } = require('mineflayer-pathfinder')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const SEARCH_RADIUS = 32
 
@@ -33,21 +34,21 @@ async function mine(bot, blockName) {
   })
 
   if (!blockType) {
-    bot.chat(`Não conheço um bloco chamado "${blockName}".`)
+    chatThrottle.say(bot, `Não conheço um bloco chamado "${blockName}".`)
     return false
   }
 
   const { needed, tool } = findSuitableTool(bot, blockType)
 
   if (needed && !tool) {
-    bot.chat(`Preciso de uma ferramenta melhor pra minerar ${blockName} de verdade — ainda não tenho uma.`)
+    chatThrottle.say(bot, `Preciso de uma ferramenta melhor pra minerar ${blockName} de verdade — ainda não tenho uma.`)
     return false
   }
 
   const block = bot.findBlock({ matching: blockType.id, maxDistance: SEARCH_RADIUS })
 
   if (!block) {
-    bot.chat(`Não encontrei ${blockName} por perto.`)
+    chatThrottle.say(bot, `Não encontrei ${blockName} por perto.`)
     return false
   }
 
@@ -58,7 +59,7 @@ async function mine(bot, blockName) {
   if (tool) await bot.equip(tool, 'hand')
 
   await bot.dig(block)
-  bot.chat(`Minerei ${blockName}.`)
+  chatThrottle.say(bot, `Minerei ${blockName}.`)
   return true
 }
 

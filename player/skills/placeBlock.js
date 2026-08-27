@@ -5,6 +5,7 @@
 
 const Vec3 = require('vec3')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 async function placeBlock(bot, blockName) {
   const item = bot.inventory.items().find((i) => i.name === blockName)
@@ -16,19 +17,19 @@ async function placeBlock(bot, blockName) {
   })
 
   if (!item) {
-    bot.chat(`Não tenho ${blockName} no inventário pra construir.`)
+    chatThrottle.say(bot, `Não tenho ${blockName} no inventário pra construir.`)
     return false
   }
 
   const referenceBlock = bot.blockAt(bot.entity.position.offset(0, -1, 0))
   if (!referenceBlock) {
-    bot.chat('Não achei um bloco de referência pra construir aqui.')
+    chatThrottle.say(bot, 'Não achei um bloco de referência pra construir aqui.')
     return false
   }
 
   await bot.equip(item, 'hand')
   await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0))
-  bot.chat(`Construí com ${blockName}.`)
+  chatThrottle.say(bot, `Construí com ${blockName}.`)
   return true
 }
 

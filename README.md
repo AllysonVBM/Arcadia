@@ -52,7 +52,7 @@ Dois loops rodam em paralelo, em velocidades diferentes — o princípio de **co
 | Cognitive Controller | [`player/core/cognitive-controller.js`](player/core/cognitive-controller.js) |
 | Output / coerência | [`player/core/output.js`](player/core/output.js) |
 | Social Awareness | parcial — agentes só se conhecem ouvindo o chat um do outro in-game, nunca por config (ver "Compartilhamento de conhecimento" abaixo) |
-| Goal Generation | fora de escopo — dependeria de Social Awareness completo |
+| Goal Generation | [`player/core/goal-generation.js`](player/core/goal-generation.js) — objetivo de curto prazo emergente, individual (não depende de Social Awareness completo pra existir) |
 
 ## Estrutura de pastas
 
@@ -123,7 +123,9 @@ player/
 └── core/
     ├── reflex-loop.js            # heurísticas locais, sem LLM
     ├── cognitive-controller.js   # loop que chama o LLM e decide current_intent
+    ├── goal-generation.js        # mantém um objetivo de curto prazo emergente
     ├── profession-reflection.js  # reflexão lenta sobre a LTM, decide/reafirma profissão
+    ├── chatThrottle.js           # evita repetir a mesma fala toda hora
     └── output.js                 # único ponto que executa current_intent
 ```
 
@@ -137,9 +139,13 @@ player/
 - [Ollama](https://ollama.com) instalado e rodando localmente, com um modelo de chat e um de embeddings já baixados:
 
 ```bash
-ollama pull llama3.1
+ollama pull qwen3:8b
 ollama pull nomic-embed-text
 ```
+
+**Por que `qwen3:8b` e não `llama3.1`** (que era o default até aqui): rodando os 5 agentes por várias horas, boa parte da estagnação observada não era falta de skill — era o modelo raramente escolhendo `craft`/`place` mesmo sabendo fazer, e quase nunca encadeando "minerar madeira → craftar" sozinho. `qwen3:8b` usa ~5GB em Q4 (cabe com folga numa GPU de 12GB mesmo compartilhando entre vários agentes) e é hoje o modelo local mais estável em tool use/JSON estruturado entre os que rodam num consumidor — [ver comparativo](https://www.morphllm.com/best-ollama-models). Ele tem um "thinking mode" que ajuda em decisões com mais opções; o projeto já manda `think: false` por padrão (`config/llm_cfg.js`) pra manter a latência baixa, mas se quiser testar com o modo de raciocínio ligado, o cliente (`llm/ollamaClient.js`) já limpa um eventual bloco `<think>` antes de tentar o `JSON.parse`.
+
+Se sua GPU tiver mais de 12GB de sobra, `phi-4:14b` é uma alternativa (~9GB, ótimo raciocínio geral) — mas com menos folga de VRAM pra requisições concorrentes de vários agentes ao mesmo tempo.
 
 ### Instalação
 
@@ -265,7 +271,7 @@ Esses comandos são atalhos diretos pra debug — não passam pelo Cognitive Con
 
 Assim que o agente nasce no mundo, dois servidores locais sobem junto com ele — nenhum dos dois precisa ser iniciado à parte:
 
-- **`http://localhost:4000`** — o painel: vida/fome com barra, posição, ameaça por perto, a decisão atual do Cognitive Controller (`current_intent` + `reason`), a última skill executada, inventário, chat do Minecraft em tempo real, memória de trabalho recente, e uma barra por skill gated mostrando se já sabe, quantas tentativas de prática já fez (de 8), moeda e quantas memórias de longo prazo já acumulou — é o jeito mais rápido de checar se um agente está progredindo de verdade ou só girando em roda. Tudo via WebSocket, atualizado a cada segundo (chat é instantâneo).
+- **`http://localhost:4000`** — o painel: vida/fome com barra, posição, ameaça por perto, o objetivo de curto prazo atual (Goal Generation), a decisão do momento do Cognitive Controller (`current_intent` + `reason`), a última skill executada, inventário, chat do Minecraft em tempo real, memória de trabalho recente, e uma barra por skill gated mostrando se já sabe, quantas tentativas de prática já fez (de 8), moeda e quantas memórias de longo prazo já acumulou — é o jeito mais rápido de checar se um agente está progredindo de verdade ou só girando em roda. Tudo via WebSocket, atualizado a cada segundo (chat é instantâneo).
 - **`http://localhost:3007`** — visão 3D do que o agente está vendo ([prismarine-viewer](https://github.com/PrismarineJS/prismarine-viewer)), embutida no próprio painel: informe a porta (já vem pré-preenchida) e clique em Conectar.
 
 Com múltiplos agentes rodando via `npm run swarm`, cada um sobe seu próprio dashboard na porta configurada em `player_cfg.js` — o frontend já foi escrito pra renderizar quantos agentes reportarem a ele (chave por nome), mas hoje isso significa abrir uma aba por porta; um relay agregando tudo numa página só ainda não existe.
@@ -279,6 +285,18 @@ Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorad
 - **Relevância** é calculada por similaridade de cosseno entre embeddings (`nomic-embed-text` via Ollama) — sem extensão de banco vetorial; na escala de memória de um agente isso é rápido o suficiente calculado em JS puro.
 
 **Se `ollama pull nomic-embed-text` nunca foi rodado**, toda escrita e leitura de LTM falha silenciosamente (o erro é só logado no console, pra não travar o agente) — o contador de memórias no painel fica em 0 pra sempre, mesmo depois de horas rodando. Vale checar `ollama list` de vez em quando pra confirmar que o modelo de embeddings está mesmo instalado, não só o de chat.
+
+### Goal Generation — objetivo de curto prazo emergente
+
+Rodando os agentes por horas, o padrão observado foi: o Controller reconhecia o problema ("preciso de uma ferramenta melhor") mas decidia de novo do zero a cada 15s, sem nunca encadear "então vou minerar madeira primeiro" de um ciclo pro outro. `core/goal-generation.js` existe pra fechar essa lacuna — é o Goal Generation do PIANO, só que individual (não depende de sinais sociais de outros agentes pra existir, ao contrário do original):
+
+- A cada ~45s (mais devagar que o Controller, mais rápido que a profissão), olha uma amostra da LTM + as skills conhecidas + os objetivos do cenário, e decide manter ou trocar um **objetivo de curto prazo** — uma frase concreta tipo "conseguir madeira pra fazer uma picareta".
+- Esse objetivo fica em `current_goal` no Agent State (só RAM — não precisa sobreviver a restart) e entra no contexto de **toda** decisão do Controller, com uma instrução explícita de priorizar avançá-lo em vez de redecidir do zero.
+- O prompt pede pra só trocar de objetivo quando o atual já foi alcançado ou ficou impossível — trocar toda hora anularia o propósito.
+
+### Chat menos repetitivo
+
+As skills falavam a mesma frase de fracasso toda vez que tentavam e falhavam (`"Não achei nenhum animal por perto pra caçar."` a cada 15s, por exemplo) — poluía o chat sem agregar nada. `core/chatThrottle.js` guarda a última vez que cada frase exata foi dita e não deixa repetir antes de 1 minuto; mensagem diferente (incluindo a fala livre que a LLM gera via `"message"`) nunca é bloqueada por isso.
 
 ### Profissão emergente
 
@@ -297,11 +315,12 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 - **Sem Action Awareness ainda.** As skills gravam `last_action` com o resultado esperado, mas nada compara isso com o que de fato aconteceu no jogo — o agente pode "achar" que comeu ou fugiu com sucesso sem confirmação.
 - **Confiabilidade do JSON depende do modelo local.** Modelos pequenos rodando via Ollama nem sempre respeitam o formato JSON pedido, mesmo com `format: "json"` — vale tanto pro Controller quanto pra consolidação de memória. Quando isso acontece, o módulo loga o erro e pula aquele ciclo — não derruba o processo, mas também não decide/lembra nada naquele tick.
 - **Sem índice vetorial.** `recall()` calcula similaridade de cosseno contra *todas* as memórias do agente a cada chamada — funciona bem até a casa de milhares de entradas; se um agente viver muito tempo isso pode precisar de um índice de verdade (sqlite-vec ou similar) mais pra frente.
-- **Sem forma de conseguir comida do zero.** `mine`/`craft`/`cook` cobrem madeira, pedra, minério e cozimento — mas não há skill de caçar (atacar mob) nem plantar/colher, então se o inventário nascer vazio e não houver comida achável por aí, o agente pode ficar preso indefinidamente no reflexo de fome sem conseguir resolver a causa. É a lacuna mais importante que resta pros objetivos de "fonte de comida renovável" dos cenários.
-- **Objetivos são informativos, não verificados.** Mesmo com a skill existindo, não há detecção automática de "objetivo concluído" — não há motor de goals/subgoals de verdade ainda.
+- **Comida ainda depende de haver animal por perto.** `hunt` existe, mas se não houver nenhum na área (ou o servidor/bioma for pobre em animais), o agente fica preso no reflexo de fome sem conseguir resolver a causa — não há fallback pra plantar/colher do zero (precisa de farmland já existente).
+- **Objetivos (do cenário e o de curto prazo do Goal Generation) são informativos, não verificados.** Nenhum dos dois tem detecção automática de "alcançado" — é a LLM que decide subjetivamente quando trocar. Não há motor de goals/subgoals com estado de progresso de verdade ainda.
 - **`place` é um primitivo, não um planejador.** Constrói um bloco por vez, sempre em cima de onde o agente está pisando — "abrigo" ainda depende do Controller encadear várias chamadas sozinho, sem nenhuma orientação de layout.
+- **O throttle de chat é por frase exata, global no processo.** Duas skills diferentes que por acaso gerassem o mesmo texto also seriam deduplicadas entre si (raro, mas possível); e é por processo, não por contexto — não existe noção de "essa repetição faz sentido agora".
 - **Dashboard sem agregação entre processos.** Com `npm run swarm`, cada agente sobe seu próprio painel numa porta separada — hoje é preciso uma aba por agente, não existe visão única.
-- **Social Awareness e Goal Generation** (PIANO) dependem de 2+ agentes no mesmo mundo interagindo de fato — ainda não implementados. O isolamento de LTM e o lançador multiagente já foram construídos pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
+- **Social Awareness** (PIANO) depende de 2+ agentes no mesmo mundo interagindo de fato — ainda não implementado como módulo formal (existe hoje só via o chat ouvido naturalmente). O isolamento de LTM e o lançador multiagente já foram construídos pensando nisso: nenhum agente deve saber da existência do outro além do que percebe no próprio jogo.
 - **Servidores com mods**: o mineflayer enxerga o mundo pelo protocolo vanilla via [`minecraft-data`](https://github.com/PrismarineJS/minecraft-data) — blocos/entidades customizados por mods que não estão nesse registro podem confundir o pathfinder (custo de movimento incorreto, dificuldade pra pular certos blocos).
 
 ## Roteiro
@@ -318,6 +337,7 @@ O projeto segue um roteiro em fases, cada uma só começando quando a anterior s
 7. **Lançador multiagente** — N processos independentes, cada um sem saber da existência dos outros até se encontrarem no jogo ✅
 8. **Cenários com objetivos** — configuração por caso de teste (isolado / dupla / quinteto), sobrevivência como prioridade inegociável acima de qualquer objetivo ✅
 9. **Profissão emergente** — reflexão de baixa frequência sobre a LTM do próprio agente, decidindo/reafirmando uma profissão ✅
+10. **Goal Generation** — objetivo de curto prazo emergente, persistido entre decisões do Controller ✅
 
 ## Referências
 

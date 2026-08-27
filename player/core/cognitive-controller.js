@@ -90,6 +90,9 @@ async function buildContext(bot) {
   const skillsText = knownSkills.length ? knownSkills.join(', ') : '(nenhuma skill aprendida ainda)'
   const balance = currency.getBalance(bot.username)
 
+  const currentGoal = blackboard.get('current_goal')
+  const goalText = currentGoal ? currentGoal.description : '(nenhum ainda — só sobrevivendo por enquanto)'
+
   return `Estado atual:
 - Vida: ${health ?? '?'}/20
 - Fome: ${hunger ?? '?'}/20
@@ -100,6 +103,7 @@ async function buildContext(bot) {
 - Recursos reconhecidos nas proximidades: ${resourcesText}
 - Skills conhecidas: ${skillsText}
 - Moeda: ${balance}
+- Objetivo de curto prazo (definido por você mesmo, mais cedo): ${goalText}
 
 Eventos recentes:
 ${recentEvents}
@@ -110,7 +114,7 @@ ${memoriesText}
 Objetivos${scenario ? ` do cenário "${scenario.id}"` : ''}:
 ${objectivesText}
 
-Lembrete: sobrevivência é sempre prioridade máxima, acima de qualquer objetivo listado acima. Só persiga um objetivo quando não estiver em perigo.`
+Lembrete: sobrevivência é sempre prioridade máxima, acima de qualquer objetivo listado acima. Se você tem um objetivo de curto prazo ativo, priorize ações que avancem ele — foi você mesmo que decidiu, mudar de ideia toda hora não leva a lugar nenhum.`
 }
 
 function parseDecision(raw) {

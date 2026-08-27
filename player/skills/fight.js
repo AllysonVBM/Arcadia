@@ -8,6 +8,7 @@ const mcDataLoader = require('minecraft-data')
 const blackboard = require('../state/blackboard.js')
 const { nearestHostile } = require('../state/validators/threat.js')
 const status = require('../state/validators/status.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const FIGHT_RADIUS = 20
 const ATTACK_INTERVAL_MS = 700
@@ -24,7 +25,7 @@ async function fight(bot) {
   })
 
   if (!inRange) {
-    bot.chat('Não tem nenhuma ameaça por perto pra enfrentar.')
+    chatThrottle.say(bot, 'Não tem nenhuma ameaça por perto pra enfrentar.')
     return false
   }
 
@@ -37,7 +38,7 @@ async function fight(bot) {
     if (!target.isValid) break
 
     if (status.isHealthCritical()) {
-      bot.chat('Recuando da luta, vida crítica demais pra continuar.')
+      chatThrottle.say(bot, 'Recuando da luta, vida crítica demais pra continuar.')
       break
     }
 
@@ -45,7 +46,7 @@ async function fight(bot) {
     await new Promise((resolve) => setTimeout(resolve, ATTACK_INTERVAL_MS))
   }
 
-  bot.chat('Luta terminada.')
+  chatThrottle.say(bot, 'Luta terminada.')
   return true
 }
 

@@ -5,6 +5,7 @@
 const mcDataLoader = require('minecraft-data')
 const { Movements, goals } = require('mineflayer-pathfinder')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const FURNACE_SEARCH_RADIUS = 32
 const SMELT_WAIT_MS = 12000 // um smelt vanilla leva ~10s; folga de segurança
@@ -21,19 +22,19 @@ async function cookItem(bot, itemName) {
   })
 
   if (!inputItem) {
-    bot.chat(`Não conheço um item chamado "${itemName}".`)
+    chatThrottle.say(bot, `Não conheço um item chamado "${itemName}".`)
     return false
   }
 
   const hasInput = bot.inventory.items().some((i) => i.name === itemName)
   if (!hasInput) {
-    bot.chat(`Não tenho ${itemName} pra cozinhar.`)
+    chatThrottle.say(bot, `Não tenho ${itemName} pra cozinhar.`)
     return false
   }
 
   const fuel = bot.inventory.items().find((i) => FUEL_NAMES.includes(i.name))
   if (!fuel) {
-    bot.chat('Não tenho combustível (carvão, madeira...) pra acender o forno.')
+    chatThrottle.say(bot, 'Não tenho combustível (carvão, madeira...) pra acender o forno.')
     return false
   }
 
@@ -41,7 +42,7 @@ async function cookItem(bot, itemName) {
   const furnaceBlock = furnaceType ? bot.findBlock({ matching: furnaceType.id, maxDistance: FURNACE_SEARCH_RADIUS }) : null
 
   if (!furnaceBlock) {
-    bot.chat('Não encontrei um forno por perto.')
+    chatThrottle.say(bot, 'Não encontrei um forno por perto.')
     return false
   }
 
@@ -56,7 +57,7 @@ async function cookItem(bot, itemName) {
     await furnace.putInput(inputItem.id, null, 1)
     await new Promise((resolve) => setTimeout(resolve, SMELT_WAIT_MS))
     await furnace.takeOutput()
-    bot.chat(`Cozinhei ${itemName}.`)
+    chatThrottle.say(bot, `Cozinhei ${itemName}.`)
     return true
   } finally {
     furnace.close()

@@ -9,6 +9,7 @@ const mcDataLoader = require('minecraft-data')
 const { Movements, goals } = require('mineflayer-pathfinder')
 const blackboard = require('../state/blackboard.js')
 const skills = require('../memory/skills.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const TABLE_SEARCH_RADIUS = 32
 
@@ -46,7 +47,7 @@ async function craftItem(bot, itemName, count = 1) {
   })
 
   if (!item) {
-    bot.chat(`Não conheço um item chamado "${itemName}".`)
+    chatThrottle.say(bot, `Não conheço um item chamado "${itemName}".`)
     return false
   }
 
@@ -70,12 +71,12 @@ async function craftItem(bot, itemName, count = 1) {
   }
 
   if (recipes.length === 0) {
-    bot.chat(`Não tenho os materiais (ou mesa de trabalho) pra craftar ${itemName}.`)
+    chatThrottle.say(bot, `Não tenho os materiais (ou mesa de trabalho) pra craftar ${itemName}.`)
     return false
   }
 
   await bot.craft(recipes[0], count, craftingTableBlock)
-  bot.chat(`Craftei ${itemName}.`)
+  chatThrottle.say(bot, `Craftei ${itemName}.`)
   return true
 }
 

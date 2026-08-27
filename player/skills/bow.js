@@ -3,6 +3,7 @@
 
 const blackboard = require('../state/blackboard.js')
 const { nearestHostile } = require('../state/validators/threat.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 const BOW_RADIUS = 24
 const DRAW_TIME_MS = 1000
@@ -15,13 +16,13 @@ async function bow(bot) {
   // evita depender de bot.nearestEntity quando já vai falhar por outro motivo.
   if (!bowItem) {
     blackboard.set('last_action', { name: 'bow', expected: { hasBow: false }, startedAt: Date.now() })
-    bot.chat('Não tenho um arco no inventário.')
+    chatThrottle.say(bot, 'Não tenho um arco no inventário.')
     return false
   }
 
   if (!hasArrow) {
     blackboard.set('last_action', { name: 'bow', expected: { hasBow: true, hasArrow: false }, startedAt: Date.now() })
-    bot.chat('Tenho arco, mas não tenho flechas.')
+    chatThrottle.say(bot, 'Tenho arco, mas não tenho flechas.')
     return false
   }
 
@@ -35,7 +36,7 @@ async function bow(bot) {
   })
 
   if (!inRange) {
-    bot.chat('Não tem nenhuma ameaça à vista pra atirar.')
+    chatThrottle.say(bot, 'Não tem nenhuma ameaça à vista pra atirar.')
     return false
   }
 
@@ -45,7 +46,7 @@ async function bow(bot) {
   await new Promise((resolve) => setTimeout(resolve, DRAW_TIME_MS))
   bot.deactivateItem()
 
-  bot.chat('Atirei uma flecha.')
+  chatThrottle.say(bot, 'Atirei uma flecha.')
   return true
 }
 

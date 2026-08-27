@@ -4,6 +4,7 @@
 
 const mcDataLoader = require('minecraft-data')
 const blackboard = require('../state/blackboard.js')
+const chatThrottle = require('../core/chatThrottle.js')
 
 async function eat(bot) {
   const mcData = mcDataLoader(bot.version)
@@ -16,7 +17,7 @@ async function eat(bot) {
   })
 
   if (!food) {
-    bot.chat('Não tenho comida no inventário.')
+    chatThrottle.say(bot, 'Não tenho comida no inventário.')
     return false
   }
 
