@@ -60,6 +60,7 @@ Dois loops rodam em paralelo, em velocidades diferentes — o princípio de **co
 player/
 ├── connect.js                    # bootstrap: cria o bot e liga todos os módulos
 ├── launcher.js                   # sobe N processos independentes (um por identidade)
+├── report.js                     # resumo legível de uma sessão (npm run report)
 ├── server_cfg.js                 # host/porta/versão do servidor Minecraft
 ├── config/
 │   ├── player_cfg.js             # roster: identidade + porta de dashboard/viewer
@@ -112,6 +113,7 @@ player/
 │   ├── profile.js                # fatos de identidade persistentes (ex.: profissão)
 │   ├── skills.js                 # quais skills "gated" o agente conhece, prática, kit inicial
 │   ├── currency.js               # moeda por agente, usada só pra pagar por skills ensinadas
+│   ├── eventLog.js                # log estruturado (JSON Lines) em data/<agente>/events.log
 │   └── consolidate.js            # loop lento que resume STM -> LTM via LLM
 ├── llm/
 │   ├── ollamaClient.js           # cliente mínimo do endpoint /api/chat do Ollama
@@ -278,6 +280,18 @@ Assim que o agente nasce no mundo, dois servidores locais sobem junto com ele �
 
 Com múltiplos agentes rodando via `npm run swarm`, cada um sobe seu próprio dashboard na porta configurada em `player_cfg.js` — o frontend já foi escrito pra renderizar quantos agentes reportarem a ele (chave por nome), mas hoje isso significa abrir uma aba por porta; um relay agregando tudo numa página só ainda não existe.
 
+### Log estruturado e relatório (pra sessões sem monitoramento ao vivo)
+
+O painel e o console são ótimos enquanto alguém está olhando — mas se você deixa o swarm rodando a noite toda, no trabalho ou na faculdade, precisa de algo que sobreviva ao terminal fechado. `memory/eventLog.js` grava cada evento significativo em `data/<agente>/events.log` (JSON Lines, um por linha): nasceu, morreu, aprendeu uma skill (e como — sorteio inicial, prática ou comprada de outro agente), mudou de profissão, mudou de objetivo de curto prazo, comprou/vendeu conhecimento, foi kickado, desconectou, reconectou. Ações bem-sucedidas (minerou, craftou, caçou...) também entram, uma por execução.
+
+Pra ver o resumo sem mexer em SQLite nem reler o log na mão:
+
+```bash
+npm run report
+```
+
+Imprime no terminal e salva em `data/reports/<timestamp>.md` — por agente: profissão atual, skills conhecidas (e em progresso, com quantas tentativas de 8), moeda, memórias de longo prazo, a linha do tempo dos eventos-marco, e a contagem de ações bem-sucedidas por skill. É só leitura — pode rodar com o swarm ativo ao mesmo tempo, sem risco de atrapalhar nada.
+
 ### Memória de longo prazo (LTM)
 
 Cada agente tem seu próprio banco em `data/<nome>/memory.sqlite` (pasta ignorada pelo git — é estado de execução, não código). Não existe coluna ou tabela compartilhada entre agentes: **o arquivo em si é o limite de isolamento**. Um agente só grava algo sobre outro quando percebe isso de fato no jogo (ouviu no chat, por exemplo) — nunca por configuração.
@@ -308,7 +322,7 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 
 ## Limitações conhecidas (honestidade de pesquisa)
 
-- **Log ainda é só `console.log`/`console.error`, sem estrutura.** Dá pra reconstruir o que aconteceu lendo o terminal (inclusive motivo de kick/erro de conexão agora), mas não é log estruturado de verdade (JSON lines, níveis, arquivo persistido) — se o terminal fechar, o histórico de eventos dessa sessão some.
+- **Log estruturado cobre eventos-marco, não tudo.** `events.log` grava nascimento/morte, aprendizado, mudança de profissão/objetivo, transações de ensino, kick/desconexão/reconexão e ações bem-sucedidas — mas diagnóstico geral (status do pathfinder, "reflexo ignorando decisão do Controller" etc.) continua só em `console.log`/`console.error`, sem persistir. Se precisar investigar algo fora dessas categorias depois que o terminal fechou, não vai ter esse rastro.
 - **`swim` não muda a política geral de movimento.** É uma ação explícita (vai até a água e atravessa) — as outras skills continuam evitando água pelo custo padrão do `Movements`, não existe ainda uma noção de "não sei nadar, então evito água em qualquer situação".
 - **`plant` não sabe preparar terra.** Só planta em farmland já existente — tilling (enxada + terra) não está implementado.
 - **`hunt`/`fight` têm uma rede de segurança de 20 ataques**, não perseguem o alvo indefinidamente se ele fugir pra longe ou se esconder.
@@ -330,7 +344,7 @@ Sem memória nenhuma na LTM, a reflexão não chama a LLM à toa — só roda qu
 
 O projeto segue um roteiro em fases, cada uma só começando quando a anterior sustenta o agente sem cair:
 
-0. **Base de conexão estável** — reconexão automática ✅, log estruturado *(parcial — ver Limitações)*
+0. **Base de conexão estável** — reconexão automática ✅, log estruturado de eventos-marco ✅ (diagnóstico geral continua sem persistir — ver Limitações)
 1. **Camada reflexa** — heurísticas de sobrevivência sem LLM ✅
 2. **Skill Execution formal** — biblioteca de ações com contrato de expectativa *(parcial)*
 3. **Cognitive Controller** — LLM local (Ollama) decidindo a ação de alto nível ✅

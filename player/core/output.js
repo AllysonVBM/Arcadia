@@ -14,6 +14,7 @@
 const blackboard = require('../state/blackboard.js')
 const reflexLock = require('../state/reflexLock.js')
 const skills = require('../memory/skills.js')
+const eventLog = require('../memory/eventLog.js')
 const flee = require('../skills/flee.js')
 const eat = require('../skills/eat.js')
 const follow = require('../skills/follow.js')
@@ -37,10 +38,16 @@ const MOVEMENT_ACTIONS = new Set([
 // Executa uma skill "gated": se o agente já sabe, roda normal. Se não sabe,
 // tenta mesmo assim — sorteia pela chance de prática (memory/skills.js) e
 // só executa a skill de verdade se der certo; senão, é só uma tentativa
-// frustrada (soma progresso, não move o bot).
-function runGated(bot, skillName, executeFn) {
+// frustrada (soma progresso, não move o bot). Toda execução que resolve
+// com sucesso (true) vira um evento no log estruturado — é "o que o agente
+// realmente conseguiu fazer", não só o que ele tentou.
+function runGated(bot, skillName, executeFn, target) {
+  function logIfSucceeded(result) {
+    if (result) eventLog.logEvent(bot.username, 'action_succeeded', { skill: skillName, target: target ?? null })
+  }
+
   if (skills.knowsSkill(bot.username, skillName)) {
-    executeFn().catch((err) => console.error(`[output] falha ao executar ${skillName}:`, err.message))
+    executeFn().then(logIfSucceeded).catch((err) => console.error(`[output] falha ao executar ${skillName}:`, err.message))
     return
   }
 
@@ -52,7 +59,7 @@ function runGated(bot, skillName, executeFn) {
   }
 
   bot.chat(`Acho que consegui, na base da tentativa (${skillName})!`)
-  executeFn().catch((err) => console.error(`[output] falha ao executar ${skillName}:`, err.message))
+  executeFn().then(logIfSucceeded).catch((err) => console.error(`[output] falha ao executar ${skillName}:`, err.message))
 }
 
 function dispatchIntent(bot) {
@@ -79,16 +86,16 @@ function dispatchIntent(bot) {
       if (intent.target) follow(bot, intent.target)
       break
     case 'mine':
-      if (intent.target) runGated(bot, 'mine', () => mine(bot, intent.target))
+      if (intent.target) runGated(bot, 'mine', () => mine(bot, intent.target), intent.target)
       break
     case 'craft':
-      if (intent.target) runGated(bot, 'craft', () => craftItem(bot, intent.target))
+      if (intent.target) runGated(bot, 'craft', () => craftItem(bot, intent.target), intent.target)
       break
     case 'place':
-      if (intent.target) runGated(bot, 'place', () => placeBlock(bot, intent.target))
+      if (intent.target) runGated(bot, 'place', () => placeBlock(bot, intent.target), intent.target)
       break
     case 'cook':
-      if (intent.target) runGated(bot, 'cook', () => cookItem(bot, intent.target))
+      if (intent.target) runGated(bot, 'cook', () => cookItem(bot, intent.target), intent.target)
       break
     case 'explore':
       explore(bot)

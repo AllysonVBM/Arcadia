@@ -9,6 +9,7 @@ const ollama = require('../llm/ollamaClient.js')
 const llmConfig = require('../config/llm_cfg.js')
 const longTermMemory = require('../memory/longTermMemory.js')
 const profile = require('../memory/profile.js')
+const eventLog = require('../memory/eventLog.js')
 
 const SYSTEM_PROMPT = `Você ajuda um agente a refletir sobre sua trajetória num mundo de Minecraft e decidir uma profissão — algo como "minerador", "fazendeiro", "explorador", "construtor", "guerreiro" ou qualquer outra que faça sentido pelo que ele viveu. Responda SOMENTE com um JSON, sem texto antes ou depois, no formato:
 {"profession": "nome curto da profissão ou null", "reason": "por quê, uma frase, baseada só nas memórias recebidas"}
@@ -45,8 +46,19 @@ async function reflectOnProfession(agentName) {
     const decision = parseProfession(raw)
     if (!decision || !decision.profession) return
 
+    const changed = !current || current.value !== decision.profession
+
     profile.setProfile(agentName, 'profession', decision.profession)
     blackboard.set('profession', decision.profession)
+
+    if (changed) {
+      eventLog.logEvent(agentName, 'profession_changed', {
+        from: current ? current.value : null,
+        to: decision.profession,
+        reason: decision.reason,
+      })
+    }
+
     console.log(`[profession] ${agentName} agora é: ${decision.profession} (${decision.reason})`)
   } catch (err) {
     console.error('[profession] reflexão falhou:', err.message)

@@ -14,6 +14,7 @@ const ollama = require('../llm/ollamaClient.js')
 const llmConfig = require('../config/llm_cfg.js')
 const longTermMemory = require('../memory/longTermMemory.js')
 const skills = require('../memory/skills.js')
+const eventLog = require('../memory/eventLog.js')
 const { getActiveScenario } = require('../config/scenario_cfg.js')
 
 const SYSTEM_PROMPT = `Você ajuda um agente de Minecraft a manter um objetivo de curto prazo — uma frase concreta e acionável (ex.: "conseguir madeira pra fazer uma picareta"), a partir do que ele já sabe fazer, do que já viveu e dos objetivos gerais do cenário, se houver.
@@ -62,11 +63,21 @@ ${memoriesText}`
     const decision = parseGoal(raw)
     if (!decision || !decision.goal) return
 
+    const changed = !current || current.description !== decision.goal
+
     blackboard.set('current_goal', {
       description: decision.goal,
       reason: decision.reason,
       updatedAt: Date.now(),
     })
+
+    if (changed) {
+      eventLog.logEvent(bot.username, 'goal_changed', {
+        from: current ? current.description : null,
+        to: decision.goal,
+        reason: decision.reason,
+      })
+    }
 
     console.log(`[goal] ${bot.username} objetivo: ${decision.goal} (${decision.reason})`)
   } catch (err) {

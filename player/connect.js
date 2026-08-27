@@ -20,6 +20,7 @@ const { getActiveScenario, getAgentEntry } = require('./config/scenario_cfg.js')
 const goTo = require('./skills/goTo.js')
 const skills = require('./memory/skills.js')
 const currency = require('./memory/currency.js')
+const eventLog = require('./memory/eventLog.js')
 
 const TEACH_OFFER_RE = /^!teach (\S+) (\d+) (\S+)$/
 const TEACH_ACCEPT_RE = /^!teach-accept (\S+) (\d+) (\S+)$/
@@ -67,6 +68,7 @@ function scheduleReconnect(reason) {
   if (intentionalShutdown) return
 
   console.log(`[connect] desconectado (${reason}) — tentando de novo em ${reconnectDelay / 1000}s`)
+  eventLog.logEvent(agentConfig.name, 'reconnect_scheduled', { reason, delayMs: reconnectDelay })
   setTimeout(connectBot, reconnectDelay)
   reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_DELAY_MS)
 }
@@ -168,6 +170,7 @@ function connectBot() {
           bot.chat(`Obrigado, mas já sei ${skillName}.`)
         } else if (currency.debit(bot.username, price)) {
           skills.learnSkill(bot.username, skillName, 'taught')
+          eventLog.logEvent(bot.username, 'skill_bought', { skill: skillName, price, from: username })
           bot.chat(`!teach-accept ${skillName} ${price} ${username}`)
           bot.chat(`Aprendi ${skillName} com ${username}!`)
         } else {
@@ -183,6 +186,7 @@ function connectBot() {
 
       if (fromTeacherUsername === bot.username) {
         currency.credit(bot.username, price)
+        eventLog.logEvent(bot.username, 'skill_sold', { skill: skillName, price, to: username })
         bot.chat(`Recebi ${price} por ensinar ${skillName}.`)
       }
     }
@@ -206,6 +210,7 @@ function connectBot() {
   // Dashboard + viewer 3D + consolidação de memória: mesma lógica.
   bot.once('spawn', () => {
     reconnectDelay = RECONNECT_BASE_DELAY_MS // conexão vingou, reseta o backoff
+    eventLog.logEvent(agentConfig.name, 'spawned', {})
 
     // Kit inicial de skills sorteado só na primeira vez (não repete em
     // restarts seguintes) + saldo inicial de moeda.
@@ -228,18 +233,26 @@ function connectBot() {
     }
   })
 
+  bot.on('death', () => {
+    const position = blackboard.get('position')
+    eventLog.logEvent(agentConfig.name, 'died', { position })
+  })
+
   // 'kicked' e 'error' são logados explicitamente — antes disso, uma
   // desconexão (ex.: "already connected", sessão fantasma de um teste
   // anterior) derrubava o processo sem deixar nenhum rastro do motivo,
   // e sem reconexão automática o agente simplesmente sumia do swarm.
   bot.on('kicked', (reason) => {
     console.log(`[connect] kickado do servidor: ${reason}`)
+    eventLog.logEvent(agentConfig.name, 'kicked', { reason })
   })
   bot.on('error', (err) => {
     console.error('[connect] erro de conexão:', err.message)
+    eventLog.logEvent(agentConfig.name, 'connection_error', { message: err.message })
   })
   bot.on('end', (reason) => {
     stopLoops()
+    eventLog.logEvent(agentConfig.name, 'disconnected', { reason })
     scheduleReconnect(reason)
   })
 }

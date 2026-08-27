@@ -6,6 +6,7 @@
 
 const { getDb } = require('./db.js')
 const profile = require('./profile.js')
+const eventLog = require('./eventLog.js')
 
 const GATED_SKILLS = ['mine', 'craft', 'place', 'cook', 'hunt', 'plant', 'swim', 'fight', 'bow']
 
@@ -32,11 +33,17 @@ function knowsSkill(agentName, skill) {
 
 function learnSkill(agentName, skill, via) {
   const db = getDb(agentName)
+  const wasKnown = knowsSkill(agentName, skill)
+
   db.prepare(
     `INSERT INTO skills (skill, known, practice_attempts, acquired_via, updated_at)
      VALUES (?, 1, 0, ?, ?)
      ON CONFLICT(skill) DO UPDATE SET known = 1, acquired_via = excluded.acquired_via, updated_at = excluded.updated_at`
   ).run(skill, via, Date.now())
+
+  if (!wasKnown) {
+    eventLog.logEvent(agentName, 'skill_learned', { skill, via })
+  }
 }
 
 // Chamado quando o Controller decide uma ação gated que o agente ainda não
